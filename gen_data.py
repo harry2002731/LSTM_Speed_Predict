@@ -1,6 +1,7 @@
 import numpy as np
 import os
 
+seach_scope = 25
 class TimeInfo():
     def __init__(self) -> None:
         self.date = "" # 日期
@@ -119,59 +120,137 @@ class DataProcess():
         self.repetition_rate = (len(self.data) - len(set(self.data)))/len(self.data)
         return self.repetition_rate
     def filter(self):
-        if self.calRepRate(self.data)>0.5:
+        if self.calRepRate(self.data)>0.9:
             self.use = False
-            # pass
-        if len(self.data) < 92:
+        if len(self.data) < 25:
             self.use = False  
         return self.use
     
     def processer(self):
         pass
 
-
-def matchData(motor_reals,motor_cmds):
+# 对齐起始的两组数据的时间戳
+def alignData(motor_reals,motor_cmds):
     temp_real_t = motor_reals[0].time_info.time
     temp_cmd_t = motor_cmds[0].time_info.time
     index = -1
 
     if temp_real_t > temp_cmd_t:
-        for i,motor_cmd in enumerate(motor_cmds):
+        for index,motor_cmd in enumerate(motor_cmds):
             if temp_real_t - motor_cmd.time_info.time <= 3.0:
-                index = i
                 motor_cmds = motor_cmds[index:-1]
                 break
     else:
-        for i,motor_real in enumerate(motor_reals):
+        for index,motor_real in enumerate(motor_reals):
             if motor_real.time_info.time - temp_cmd_t >= 3.0:
-                index = i
                 motor_reals = motor_reals[index:-1]
                 break
     assert index != -1,"没有匹配的数据"
-    j = 0
-    len_list = []
-    with open(r"C:\Projects\Python\speed_control\train.txt", "a") as file:
+    return motor_reals, motor_cmds 
+
+# # 数据时间戳匹配
+# def matchData(motor_reals,motor_cmds):
+#     len_list = []
+#     with open(r"data\train.txt", "a") as file:
+#         file.truncate(0)
+#         for index, motor_real in enumerate(motor_reals):
+#             cmd_temp = []
+#             real_temp = []
+#             for motor_cmd in motor_cmds:
+#                 if  0.0 < motor_real.time_info.time - motor_cmd.time_info.time <= 3.0:
+                    
+#                     if index >= seach_scope and index < len(motor_reals) - seach_scope:
+#                         start_index = index - seach_scope
+#                         end_index = index + seach_scope
+#                     else:
+#                         continue
+        
+#                     a = np.array([i.time_info.time for i in motor_reals[start_index:end_index]])
+#                     b = np.array(np.full(a.shape,motor_cmd.time_info.time))
+#                     minus_result = abs(a-b)
+#                     tmp_ = a[minus_result.argmin()]
+
+#                     if len(real_temp)>0:
+#                         if min(minus_result) < 0.03 and tmp_ != real_temp[-1][0]:
+
+#                             real_temp.append([tmp_,round(minus_result[minus_result.argmin()], 3)])
+#                             cmd_temp.append([motor_cmd.time_info.time,round(motor_cmd.motor2, 3)])
+#                     else:
+#                         if min(minus_result) < 0.03:
+#                             # real_temp.append([tmp_,minus_result[minus_result.argmin()],motor_cmd.time_info.time,motor_cmd.motor2])
+#                             real_temp.append([tmp_,round(minus_result[minus_result.argmin()], 3)])
+#                             cmd_temp.append([motor_cmd.time_info.time,round(motor_cmd.motor2, 3)])
+
+#             final_temp = [motor_real.speed,real_temp,cmd_temp]
+#             if len(real_temp) >10:
+#                 # len_list.append(len(real_temp))
+#                 real_array = np.array(real_temp)[:,-1]
+#                 cmd_array = np.array(cmd_temp)[:,-1]
+#                 dp = DataProcess(real_array)
+#                 dp2 = DataProcess(cmd_array)
+#                 tmp_temp = [motor_real.speed,real_array.tolist(),cmd_array.tolist()]
+#                 if dp.filter() and dp2.filter(): 
+#                     len_list.append(len(real_temp))
+#                     for item in  tmp_temp:
+#                         file.write(str(item)+" ")
+#                     file.write("\n")
+
+
+# 数据时间戳匹配
+def matchData(motor_reals,motor_cmds):
+    with open(r"data\train.txt", "a") as file:
         # file.truncate(0)
-        for motor_real in motor_reals:
-            temp = []
-            temp.append(motor_real.speed)
+        len_list = []
+        for index, motor_real in enumerate(motor_reals):
+            cmd_temp = []
+            real_temp = []
             for motor_cmd in motor_cmds:
                 if  0.0 < motor_real.time_info.time - motor_cmd.time_info.time <= 3.0:
-                    temp.append(motor_cmd.motor2)
-            dp = DataProcess(temp)
-            if dp.filter():
-                len_list.append(len(temp))
-                j+=1
-                for item in temp:
-                    file.write(str(item)+" ")
-                file.write("\n")
-        print(np.mean(len_list),j)
+                    motor_cmd_time = motor_cmd.time_info.time
+                    if  seach_scope <= index and index < len(motor_reals) - seach_scope:
+                        start_index = index - seach_scope
+                        end_index = index + seach_scope
+                    else:
+                        continue
+        
+                    real_time_array = np.array([tmp.time_info.time for tmp in motor_reals[start_index:end_index]])
+                    real_speed_array = np.array([tmp.speed for tmp in motor_reals[start_index:end_index]])
+                    motor_cmd_array = np.full(real_time_array.shape,motor_cmd_time)
+                    time_gap = abs(real_time_array-motor_cmd_array)
+                    min_gap_real = real_time_array[time_gap.argmin()]
+
+                    if min(time_gap) < 0.03:
+                        if len(real_temp)>0:
+                            if min_gap_real != real_temp[-1][0]:
+                                real_temp.append([min_gap_real, round(real_speed_array[time_gap.argmin()], 3)])
+                                cmd_temp.append([motor_cmd_time, round(motor_cmd.motor2, 3)])
+                        else:
+                            real_temp.append([min_gap_real, round(real_speed_array[time_gap.argmin()], 3)])
+                            cmd_temp.append([motor_cmd_time, round(motor_cmd.motor2, 3)])
+
+            final_temp = [motor_real.speed,real_temp,cmd_temp]
+            if len(real_temp) >10:
+                real_array = np.array(real_temp)[:,-1]
+                cmd_array = np.array(cmd_temp)[:,-1]
+                dp = DataProcess(real_array)
+                dp2 = DataProcess(cmd_array)
+                tmp_temp = [motor_real.speed,real_array.tolist(),cmd_array.tolist()]
+                if dp.filter() and dp2.filter(): 
+                    len_list.append(len(real_temp))
+                    for item in  tmp_temp:
+                        # print(final_temp)
+                        file.write(str(item)+" ")
+                    file.write("\n")
+# 
+        print(len(len_list),len_list)
 
 if __name__ == "__main__":
     directory_path = r'data\origin_dataset\data_set'
     for root, dirs, files in os.walk(directory_path):
         for file_name in files:
+            print(file_name)
             motor_reals = decodeMotorReal(r"data\origin_dataset\real_speed\\"+file_name + ".txt")
             motor_cmds = decodeMotorCMD(r"data\origin_dataset\cmd_speed\\"+file_name + ".txt")
+            motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
             matchData(motor_reals,motor_cmds)
 
