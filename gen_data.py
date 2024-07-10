@@ -120,7 +120,7 @@ class DataProcess():
         self.repetition_rate = (len(self.data) - len(set(self.data)))/len(self.data)
         return self.repetition_rate
     def filter(self):
-        if self.calRepRate(self.data)>0.9:
+        if self.calRepRate(self.data)>0.75:
             self.use = False
         if len(self.data) < 25:
             self.use = False  
@@ -197,8 +197,8 @@ def alignData(motor_reals,motor_cmds):
 
 
 # 数据时间戳匹配
-def matchData(motor_reals,motor_cmds):
-    with open(r"data\train.txt", "a") as file:
+def matchData(motor_reals,motor_cmds,path):
+    with open(path, "a") as file:
         # file.truncate(0)
         len_list = []
         for index, motor_real in enumerate(motor_reals):
@@ -244,13 +244,28 @@ def matchData(motor_reals,motor_cmds):
 # 
         print(len(len_list),len_list)
 
+# 滤除文件内的[]和，
+def formatFile(path):
+    with open(path, "r") as file:
+        lines = file.readlines() 
+        with open(r"data\train.txt", "a") as write_file:
+            write_file.truncate(0)  # 清除文件内容
+            for line in lines: 
+                line =  line.replace('[', '').replace(']', '').replace(',', '')
+                write_file.write(str(line))
+
+
+
 if __name__ == "__main__":
-    directory_path = r'data\origin_dataset\data_set'
+    directory_path = r'data\new_dataset_car2_600kg\data_set'
+    with open(r"data\orin_train.txt", "a") as file:
+        file.truncate(0)
     for root, dirs, files in os.walk(directory_path):
         for file_name in files:
             print(file_name)
-            motor_reals = decodeMotorReal(r"data\origin_dataset\real_speed\\"+file_name + ".txt")
-            motor_cmds = decodeMotorCMD(r"data\origin_dataset\cmd_speed\\"+file_name + ".txt")
+            motor_reals = decodeMotorReal(r"data\new_dataset_car2_600kg\real_speed\\"+file_name + ".txt")
+            motor_cmds = decodeMotorCMD(r"data\new_dataset_car2_600kg\cmd_speed\\"+file_name + ".txt")
             motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
-            matchData(motor_reals,motor_cmds)
+            matchData(motor_reals,motor_cmds,r"data\orin_train.txt")
+    formatFile(r"data\orin_train.txt")
 
