@@ -1,7 +1,7 @@
 import numpy as np
 import os
 
-seach_scope = 25
+seach_scope = 50
 class TimeInfo():
     def __init__(self) -> None:
         self.date = "" # 日期
@@ -100,7 +100,6 @@ def decodeMotorCMD(path):
             data.append(m)
     return data
     
-
 def decodeMotorReal(path):
     data = []
     with open(path,"r") as file:
@@ -111,23 +110,43 @@ def decodeMotorReal(path):
             data.append(m)
     return data
 
-class DataProcess():
+class MotorDataProcess():
     def __init__(self,data) -> None:
         self.repetition_rate = 0
         self.data = data
+        self.timestamps, self.speeds = np.array(data).T
         self.use = True
-    def calRepRate(self,data):
+
+    def judgeTimeStamp(self, time_gap):
+        start_time = self.timestamps.min()
+        end_time = self.timestamps.max()
+        if end_time-start_time < time_gap:
+            return False
+        else:
+            return True
+        
+    def calRepRate(self):
         self.repetition_rate = (len(self.data) - len(set(self.data)))/len(self.data)
         return self.repetition_rate
+    
     def filter(self):
-        if self.calRepRate(self.data)>0.75:
-            self.use = False
-        if len(self.data) < 25:
+        # if self.calRepRate(self.data)>0.999:
+        #     self.use = False
+        if len(self.data) < 30:
             self.use = False  
         return self.use
     
-    def processer(self):
-        pass
+    def interp(self, time_span, time_gap):
+        start_time = self.timestamps.min()
+        end_time = self.timestamps.max()
+        new_timestamps = np.arange(end_time-time_span, end_time, time_gap)
+
+        # 使用线性插值计算新时间点的速度
+        new_speeds = np.interp(new_timestamps, self.timestamps, self.speeds)
+        new_speeds_rounded = np.round(new_speeds, 3)
+        new_timestamps_rounded = np.round(new_timestamps, 3)
+        temp = np.stack([new_timestamps_rounded, new_speeds_rounded])
+        self.data = np.transpose(temp, (1,0))
 
 # 对齐起始的两组数据的时间戳
 def alignData(motor_reals,motor_cmds):
@@ -148,52 +167,6 @@ def alignData(motor_reals,motor_cmds):
     assert index != -1,"没有匹配的数据"
     return motor_reals, motor_cmds 
 
-# # 数据时间戳匹配
-# def matchData(motor_reals,motor_cmds):
-#     len_list = []
-#     with open(r"data\train.txt", "a") as file:
-#         file.truncate(0)
-#         for index, motor_real in enumerate(motor_reals):
-#             cmd_temp = []
-#             real_temp = []
-#             for motor_cmd in motor_cmds:
-#                 if  0.0 < motor_real.time_info.time - motor_cmd.time_info.time <= 3.0:
-                    
-#                     if index >= seach_scope and index < len(motor_reals) - seach_scope:
-#                         start_index = index - seach_scope
-#                         end_index = index + seach_scope
-#                     else:
-#                         continue
-        
-#                     a = np.array([i.time_info.time for i in motor_reals[start_index:end_index]])
-#                     b = np.array(np.full(a.shape,motor_cmd.time_info.time))
-#                     minus_result = abs(a-b)
-#                     tmp_ = a[minus_result.argmin()]
-
-#                     if len(real_temp)>0:
-#                         if min(minus_result) < 0.03 and tmp_ != real_temp[-1][0]:
-
-#                             real_temp.append([tmp_,round(minus_result[minus_result.argmin()], 3)])
-#                             cmd_temp.append([motor_cmd.time_info.time,round(motor_cmd.motor2, 3)])
-#                     else:
-#                         if min(minus_result) < 0.03:
-#                             # real_temp.append([tmp_,minus_result[minus_result.argmin()],motor_cmd.time_info.time,motor_cmd.motor2])
-#                             real_temp.append([tmp_,round(minus_result[minus_result.argmin()], 3)])
-#                             cmd_temp.append([motor_cmd.time_info.time,round(motor_cmd.motor2, 3)])
-
-#             final_temp = [motor_real.speed,real_temp,cmd_temp]
-#             if len(real_temp) >10:
-#                 # len_list.append(len(real_temp))
-#                 real_array = np.array(real_temp)[:,-1]
-#                 cmd_array = np.array(cmd_temp)[:,-1]
-#                 dp = DataProcess(real_array)
-#                 dp2 = DataProcess(cmd_array)
-#                 tmp_temp = [motor_real.speed,real_array.tolist(),cmd_array.tolist()]
-#                 if dp.filter() and dp2.filter(): 
-#                     len_list.append(len(real_temp))
-#                     for item in  tmp_temp:
-#                         file.write(str(item)+" ")
-#                     file.write("\n")
 
 
 # 数据时间戳匹配
@@ -205,14 +178,17 @@ def matchData(motor_reals,motor_cmds,path):
             cmd_temp = []
             real_temp = []
             for motor_cmd in motor_cmds:
+                # 时间搜索范围
                 if  0.0 < motor_real.time_info.time - motor_cmd.time_info.time <= 3.0:
                     motor_cmd_time = motor_cmd.time_info.time
+                    # 判断索引是否大于seach_scope搜索范围
                     if  seach_scope <= index and index < len(motor_reals) - seach_scope:
                         start_index = index - seach_scope
-                        end_index = index + seach_scope
+                        end_index = index + seach_scope-25
                     else:
                         continue
-        
+
+                    # 判断搜索范围内（start_index:end_index）是否有与motor_cmd时间戳匹配（time_gap小于0.03）的motor_real
                     real_time_array = np.array([tmp.time_info.time for tmp in motor_reals[start_index:end_index]])
                     real_speed_array = np.array([tmp.speed for tmp in motor_reals[start_index:end_index]])
                     motor_cmd_array = np.full(real_time_array.shape,motor_cmd_time)
@@ -227,21 +203,28 @@ def matchData(motor_reals,motor_cmds,path):
                         else:
                             real_temp.append([min_gap_real, round(real_speed_array[time_gap.argmin()], 3)])
                             cmd_temp.append([motor_cmd_time, round(motor_cmd.motor2, 3)])
-
-            final_temp = [motor_real.speed,real_temp,cmd_temp]
+                            
+            # final_temp = [motor_real.speed,real_temp,cmd_temp]
             if len(real_temp) >10:
-                real_array = np.array(real_temp)[:,-1]
-                cmd_array = np.array(cmd_temp)[:,-1]
-                dp = DataProcess(real_array)
-                dp2 = DataProcess(cmd_array)
-                tmp_temp = [motor_real.speed,real_array.tolist(),cmd_array.tolist()]
-                if dp.filter() and dp2.filter(): 
-                    len_list.append(len(real_temp))
-                    for item in  tmp_temp:
-                        # print(final_temp)
-                        file.write(str(item)+" ")
-                    file.write("\n")
-# 
+                if real_temp[-1][0]-motor_real.time_info.time == 0:
+                    real_temp.pop()
+                    cmd_temp.pop()
+
+                dp1 = MotorDataProcess(real_temp)
+                dp2 = MotorDataProcess(cmd_temp)
+
+                if dp1.judgeTimeStamp(time_gap=2.8) and dp2.judgeTimeStamp(time_gap=2.8):
+                    # dp1.interp(time_span=3.0, time_gap=0.1)
+                    # dp2.interp(time_span=3.0, time_gap=0.1)
+
+                    real_array = np.array(dp1.data)[:,-1]
+                    cmd_array = np.array(dp2.data)[:,-1]
+                    tmp_temp = [motor_real.speed,real_array.tolist(),cmd_array.tolist()]
+                    if dp1.filter() and dp2.filter(): 
+                        len_list.append(len(real_array))
+                        for item in tmp_temp:
+                            file.write(str(item)+" ")
+                        file.write("\n")
         print(len(len_list),len_list)
 
 # 滤除文件内的[]和，
@@ -256,16 +239,54 @@ def formatFile(path):
 
 
 
-if __name__ == "__main__":
-    directory_path = r'data\new_dataset_car2_600kg\data_set'
-    with open(r"data\orin_train.txt", "a") as file:
-        file.truncate(0)
-    for root, dirs, files in os.walk(directory_path):
-        for file_name in files:
-            print(file_name)
-            motor_reals = decodeMotorReal(r"data\new_dataset_car2_600kg\real_speed\\"+file_name + ".txt")
-            motor_cmds = decodeMotorCMD(r"data\new_dataset_car2_600kg\cmd_speed\\"+file_name + ".txt")
-            motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
-            matchData(motor_reals,motor_cmds,r"data\orin_train.txt")
-    formatFile(r"data\orin_train.txt")
+# 数据时间戳匹配
+def matchData2(motor_reals,motor_cmds,path):
+    with open(path, "a") as file:
+        cmd_temp = []
+        real_temp = []
+        for index, motor_real in enumerate(motor_reals):
+
+            for motor_cmd in motor_cmds:
+                # 时间搜索范围
+                if  0.0 < motor_real.time_info.time - motor_cmd.time_info.time <= 0.1:
+                        real_temp.append([motor_real.time_info.time , round(motor_real.speed, 3)])
+                        cmd_temp.append([motor_cmd.time_info.time, round(motor_cmd.motor2, 3)])
+                        file.write(str(motor_real.time_info.time)+" "+str(round(motor_real.speed, 3))+" "+str(round(motor_cmd.motor2, 3))+" ")
+                        file.write("\n")
+                        break
+        print(111)            
+        #     # final_temp = [motor_real.speed,real_temp,cmd_temp]
+        #     if len(real_temp) >10:
+        #         dp1 = MotorDataProcess(real_temp)
+        #         dp2 = MotorDataProcess(cmd_temp)
+        #         if dp1.judgeTimeStamp(time_gap=2.8) and dp2.judgeTimeStamp(time_gap=2.8):
+        #             dp1.interp(time_span=3.0, time_gap=0.1)
+        #             dp2.interp(time_span=3.0, time_gap=0.1)
+
+        #             real_array = np.array(dp1.data)[:,-1]
+        #             cmd_array = np.array(dp2.data)[:,-1]
+        #             tmp_temp = [motor_real.speed,real_array.tolist(),cmd_array.tolist()]
+        #             if dp1.filter() and dp2.filter(): 
+        #                 len_list.append(len(real_array))
+        #                 for item in tmp_temp:
+        #                     file.write(str(item)+" ")
+        #                 file.write("\n")
+        # print(len(len_list),len_list)
+
+
+
+
+
+# if __name__ == "__main__":
+#     directory_path = r'data\new_dataset_car2_600kg\data_set'
+#     with open(r"data\orin_train.txt", "a") as file:
+#         file.truncate(0)
+#     for root, dirs, files in os.walk(directory_path):
+#         for file_name in files:
+#             print(file_name)
+#             motor_reals = decodeMotorReal(r"data\new_dataset_car2_600kg\real_speed\\"+file_name + ".txt")
+#             motor_cmds = decodeMotorCMD(r"data\new_dataset_car2_600kg\cmd_speed\\"+file_name + ".txt")
+#             motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
+#             matchData(motor_reals,motor_cmds,r"data\orin_train.txt")
+#     formatFile(r"data\orin_train.txt")
 

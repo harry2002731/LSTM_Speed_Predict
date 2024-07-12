@@ -34,21 +34,25 @@ def extractLog(dir,tar_dir, command):
 
 if __name__ == "__main__":
     # 指定要遍历的文件夹路径
-    # root_directory_path =   r'data\\new_dataset_car1\\'
+    root_directory_path =   r'data\\new_dataset_car2\\'
 
-    # orin_path = root_directory_path + r'data_set\\'
-    # motor_real_path = root_directory_path+r'real_speed\\'
-    # motor_cmd_path = root_directory_path+r"cmd_speed\\"
-    # # 调用函数并打印结果
-    # # extractRealLog(directory_path,motor_real_directory_path)
-    # extractLog(orin_path,motor_cmd_path, cmd_match_line)
-    # extractLog(orin_path,motor_real_path, real_match_line)
+    orin_path = root_directory_path + r'data_set\\'
+    motor_real_path = root_directory_path+r'real_speed\\'
+    motor_cmd_path = root_directory_path+r"cmd_speed\\"
+    # 调用函数并打印结果
+    # extractRealLog(directory_path,motor_real_directory_path)
+    extractLog(orin_path,motor_cmd_path, cmd_match_line)
+    extractLog(orin_path,motor_real_path, real_match_line)
 
-    # for root, dirs, files in os.walk(orin_path):
-    #     for file_name in files:
-    #         print(file_name)
-    #         motor_reals = decodeMotorReal(motor_real_path + file_name + ".txt")
-    #         motor_cmds = decodeMotorCMD(motor_cmd_path + file_name + ".txt")
-    #         motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
-    #         matchData(motor_reals,motor_cmds,r"data\new_car1_train.txt")
+    with open(r"data\new_car2_train.txt", "a") as file:
+        file.truncate(0)
+    for root, dirs, files in os.walk(orin_path):
+        for file_name in files:
+            motor_reals = decodeMotorReal(motor_real_path + file_name + ".txt")
+            motor_cmds = decodeMotorCMD(motor_cmd_path + file_name + ".txt")
+            motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
+
+            matchData(motor_reals,motor_cmds,r"data\new_car2_train.txt")
+            # matchData2(motor_reals,motor_cmds,r"data\111.txt")
+            # break
     formatFile(r"data\new_car2_train.txt")
