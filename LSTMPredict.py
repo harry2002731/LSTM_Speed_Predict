@@ -47,12 +47,12 @@ predict_y = []
 # 	plt.plot(x, y * np.array([-1]))  # 画出当前x列表和y列表中的值的图形
 # 	plt.pause(0.001)  # 暂停一段时间，不然画的太快会卡住显示不出来
 # 	plt.ioff()  # 关闭画图窗口
-input_size = 30
+input_size = 35
 
 total_data_list = []
 motor_real = []
 motor_cmd = []
-path = r"C:\Projects\Python\LSTM_Speed_Predict\data\111.txt"
+path = r"C:\Projects\Python\LSTM_Speed_Predict\data\new_dataset_car2\compared_speed\robokit_2024-07-09_11-32-22.13.log.txt"
 with open(path, "r") as f:
 	line = f.readline() # 读取第一行
 	while line:
@@ -66,7 +66,7 @@ with open(path, "r") as f:
 moving_win = 0
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = torch.load(r"model.pth").to(device)
-
+model.eval()
 for index, i in enumerate(total_data_list):
 	motor_real.append(i[0])
 	motor_cmd.append(i[1])
@@ -87,7 +87,7 @@ fig.canvas.mpl_disconnect(fig.canvas.manager.key_press_handler_id)#取消默认�
 fig.canvas.mpl_connect('key_press_event', on_key_press)
 
 real_scaler,cmd_scaler = loadDataTest(False)
-if len(motor_real) >= 30:
+if len(motor_real) >= 35:
 	current_index_0 = []
 	current_index_1 = []
 	current_index_2 = []
@@ -98,9 +98,9 @@ if len(motor_real) >= 30:
 		predict_y = []
 		predict_x = []
 		for j in range(5):
-			predict_motor_cmd = motor_cmd[moving_win+j:moving_win+j+30]
+			predict_motor_cmd = motor_cmd[moving_win+j:moving_win+j+35]
 			if j == 0:
-				predict_motor_real = motor_real[moving_win:moving_win+30]
+				predict_motor_real = motor_real[moving_win:moving_win+35]
 				tmp_predict_motor_real = deepcopy(predict_motor_real)
 			else:
 				predict_motor_real = tmp_predict_motor_real[j:]
@@ -113,7 +113,7 @@ if len(motor_real) >= 30:
 			images2 = imgs2.view(-1, 1, input_size)
 			outputs = model(images,images2)
 			test_labels = outputs.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
-			predict_x.append(index+30+j)
+			predict_x.append(index+35+j)
 			tmp_predict_motor_real.append(np.round(test_labels.item(),3))
 			predict_y.append(np.round(test_labels.item(),3))
 			y = np.round(test_labels.item(),3)
@@ -132,17 +132,17 @@ if len(motor_real) >= 30:
 
 		ax.plot(x, motor_real, linewidth = 3.0)  # 画出当前x列表和y列表中的值的图形
 
-		x1 = np.linspace(30, 30+len(current_index_0)-1, len(current_index_0))
+		x1 = np.linspace(35, 35+len(current_index_0)-1, len(current_index_0))
 		ax.plot(x1, current_index_0,color='c', label='当前帧')  # 画出当前x列表和y列表中的值的图形
 
 		# plt.plot(x1, current_index_1)  # 画出当前x列表和y列表中的值的图形
 
-		x3 = np.linspace(32, 32+len(current_index_0)-1, len(current_index_0))
+		x3 = np.linspace(38, 38+len(current_index_0)-1, len(current_index_0))
 		ax.plot(x3, current_index_2,color='m', label='第三帧')  # 画出当前x列表和y列表中的值的图形
 
 		# plt.plot(x1, current_index_3)  # 画出当前x列表和y列表中的值的图形
 
-		x5 = np.linspace(35, 35+len(current_index_0)-1, len(current_index_0))
+		x5 = np.linspace(40, 40+len(current_index_0)-1, len(current_index_0))
 		ax.plot(x5, current_index_4,color='y', label='第五帧')  # 画出当前x列表和y列表中的值的图形
 
 		ax.scatter(predict_x, predict_y)

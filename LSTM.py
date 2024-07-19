@@ -9,16 +9,16 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
 from sklearn.preprocessing import MinMaxScaler
 import random
-
-batch_size = 256
-input_size = 24
+import time
+batch_size = 128
+input_size = 35
 hidden_size = 16
 hidden_size2 = 32
 num_layers = 3
 output_size = 1
-num_epochs = 3000
+num_epochs = 1500
 # 学习率
-learning_rate = 0.005
+learning_rate = 0.002
 # betas参数
 betas = (0.95, 0.999)
 # eps参数
@@ -46,22 +46,33 @@ class Mydataset(data.Dataset):
     def __len__(self):
         return len(self.idx)
     
-def randomSortData(path,random_seed):
-    random.seed(random_seed)  
-    total_data_list = []
-    with open(path, "r") as f:
-        line = f.readline() # 读取第一行
-        while line:
-            data_list = line.split(" ")
-            data_list.pop()
-            data_list = [float(item) for item in data_list]
-            total_data_list.append(data_list)
-            line = f.readline() # 读取下一行
-    random.shuffle(total_data_list)
+def randomSortData(path,random_seed,if_random):
+    if if_random:
+        random.seed(random_seed)  
+        total_data_list = []
+        with open(path, "r") as f:
+            line = f.readline() # 读取第一行
+            while line:
+                data_list = line.split(" ")
+                data_list.pop()
+                data_list = [float(item) for item in data_list]
+                total_data_list.append(data_list)
+                line = f.readline() # 读取下一行
+        random.shuffle(total_data_list)
+    else:
+        total_data_list = []
+        with open(path, "r") as f:
+            line = f.readline() # 读取第一行
+            while line:
+                data_list = line.split(" ")
+                data_list.pop()
+                data_list = [float(item) for item in data_list]
+                total_data_list.append(data_list)
+                line = f.readline() # 读取下一行
     return total_data_list
 
-def loadData(path,device,random_state):
-    total_data_list = randomSortData(path,35)
+def loadData(path,device,random_state,if_random):
+    total_data_list = randomSortData(path,35,if_random)
     data_label = []
     real_data = []
     cmd_data = []
@@ -72,19 +83,20 @@ def loadData(path,device,random_state):
         len_data_list = len(data_list)
         real_list = data_list[1:int((len_data_list-1)/2)+1]
         cmd_list = data_list[int((len_data_list-1)/2)+1:]
+        #可能导致比较大的问题
         while len(real_list) >input_size:
             real_list.pop(0)
+        while len(cmd_list) >input_size:
             cmd_list.pop(0)
         if len(real_list) == input_size:
             data_label.append(label)
             real_data.append(np.array(real_list))
             cmd_data.append(np.array(cmd_list))
 
-    scaler = MinMaxScaler(feature_range=(-1, 1))
-    real_data = scaler.fit_transform(real_data)
-
-    scaler = MinMaxScaler(feature_range=(-1, 1))
-    cmd_data = scaler.fit_transform(cmd_data)
+    # scaler = MinMaxScaler(feature_range=(-1, 1))
+    # real_data = scaler.fit_transform(real_data)
+    # scaler = MinMaxScaler(feature_range=(-1, 1))
+    # cmd_data = scaler.fit_transform(cmd_data)
     len_data = int(len(real_data)*(1 - random_state))
     real_data = torch.tensor(real_data).to(device)
     cmd_data = torch.tensor(cmd_data).to(device)
@@ -94,6 +106,7 @@ def loadData(path,device,random_state):
     test_list = [real_data[len_data:-1],cmd_data[len_data:-1],data_label[len_data:-1]]
 
     return train_list,test_list
+
 
 
 class LSTMModel(nn.Module):
@@ -124,14 +137,14 @@ class LSTMModel(nn.Module):
 class MultiInputLSTM(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size):
         super(MultiInputLSTM, self).__init__()
-        self.CMD_LSTM = nn.LSTM(24, 64, 3, batch_first=True,dropout=0.2)
+        self.CMD_LSTM = nn.LSTM(input_size, 64, 5, batch_first=True,dropout=0.1)
         self.bn1 = nn.BatchNorm1d(64)
 
-        self.Real_LSTM = nn.LSTM(24, 64, 3, batch_first=True,dropout=0.2)
+        self.Real_LSTM = nn.LSTM(input_size, 64, 5, batch_first=True,dropout=0.1)
         self.bn2 = nn.BatchNorm1d(64)
 
-        self.concat_LSTM = nn.LSTM(496, 128, 3, batch_first=True,dropout=0.6)
-        self.bn3 = nn.BatchNorm1d(128)
+        self.concat_LSTM = nn.LSTM(496, 512, 5, batch_first=True,dropout=0.4)
+        self.bn3 = nn.BatchNorm1d(512)
 
         self.conv_layer1 = nn.Sequential(nn.Conv1d(in_channels=1, out_channels=8, kernel_size=6,padding=2))
         self.conv_layer2 = nn.Sequential(nn.Conv1d(in_channels=1, out_channels=8, kernel_size=6,padding=2))
@@ -140,14 +153,14 @@ class MultiInputLSTM(nn.Module):
         self.max_pooling = nn.MaxPool1d(3, stride=2)
         self.relu =  nn.ReLU(inplace=False)
 
-        self.fc = nn.Linear(128, output_size)
+        self.fc = nn.Linear(512, output_size)
 
     def forward(self, x1,x2):
-        x1 = x1.view(-1,1,24)
+        x1 = x1.view(-1,1,input_size)
         real_out, _ = self.Real_LSTM(x1)
         real_out_bn = self.bn1(real_out[:, -1, :]) 
 
-        x2 = x2.view(-1,1,24)
+        x2 = x2.view(-1,1,input_size)
         cmd_out, _ = self.CMD_LSTM(x2) 
         cmd_out_bn = self.bn2(cmd_out[:, -1, :]) 
         
@@ -163,7 +176,8 @@ class MultiInputLSTM(nn.Module):
         return out
 
 def train(device):
-    train_, test_ = loadData(r"data\train.txt",device,0.2)
+    stary_time = time.time()
+    train_, test_ = loadData(r"data\train.txt",device,0.5,True)
     test_data, test_data_2 ,test_labels = test_
     train_data, train_data_2 ,train_labels = train_
     dataset = Mydataset(train_data,train_data_2, train_labels)
@@ -188,6 +202,7 @@ def train(device):
         amsgrad=amsgrad
     )
     iter = 0
+    start_time = time.time()
     print('TRAINING STARTED.\n')
     for epoch in range(num_epochs):
         for i, (motor_data, train_labels) in enumerate(dataloader):
@@ -226,12 +241,12 @@ def train(device):
                 print(f'Epoch: {epoch + 1}/{num_epochs}\t Iteration: {iter}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f}') 
                 
     torch.save(model, r"model.pth")
-
+    print(time.time()-start_time,f"num_epochs为{num_epochs}")
 def test(device):
     loss_function = nn.MSELoss()
 
     model = torch.load(r"model.pth").to(device)
-    train_, test_ = loadData(r"data\train.txt",device,0.2)
+    train_, test_ = loadData(r"data\train.txt",device,1.0,False)
     test_data, test_data_2 ,test_labels = test_
 
     dataset = Mydataset(test_data,test_data_2, test_labels)
@@ -267,6 +282,8 @@ def test(device):
             if iter % 100 == 0:
                 print(f'Iteration: {iter}\t Loss: {loss.item():.4f}')
         # pred = pred.cpu()
+        print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
+
         n = i
         y, pred = np.array(y), np.array(pred)
         x = [i for i in range(0, n)]
@@ -280,6 +297,6 @@ def test(device):
 if __name__== "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # print(torch.cuda.is_available())
-    train(device)
+    # train(device)
     test(device)
 

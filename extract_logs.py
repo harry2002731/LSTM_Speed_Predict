@@ -33,18 +33,22 @@ def extractLog(dir,tar_dir, command):
                         f.write(str(item))
 
 if __name__ == "__main__":
+
     # 指定要遍历的文件夹路径
-    root_directory_path =   r'data\\new_dataset_car2\\'
+    root_directory_path =   r'data\\new_dataset_car1\\'
 
     orin_path = root_directory_path + r'data_set\\'
     motor_real_path = root_directory_path+r'real_speed\\'
     motor_cmd_path = root_directory_path+r"cmd_speed\\"
+    motor_compared_path = root_directory_path+r"compared_speed\\"
+    motor_train_path = root_directory_path+r"train_speed\\"
+
     # 调用函数并打印结果
     # extractRealLog(directory_path,motor_real_directory_path)
     extractLog(orin_path,motor_cmd_path, cmd_match_line)
     extractLog(orin_path,motor_real_path, real_match_line)
 
-    with open(r"data\new_car2_train.txt", "a") as file:
+    with open(r"data\new_car1_train.txt", "a") as file:
         file.truncate(0)
     for root, dirs, files in os.walk(orin_path):
         for file_name in files:
@@ -52,7 +56,9 @@ if __name__ == "__main__":
             motor_cmds = decodeMotorCMD(motor_cmd_path + file_name + ".txt")
             motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
 
-            matchData(motor_reals,motor_cmds,r"data\new_car2_train.txt")
-            # matchData2(motor_reals,motor_cmds,r"data\111.txt")
+            # matchData(motor_reals,motor_cmds,r"data\new_car2_train.txt")
+            matchData(motor_reals,motor_cmds,motor_compared_path + file_name + ".txt")
+            generateTrainData(motor_train_path + file_name + ".txt",motor_compared_path + file_name + ".txt")
+            mergeData(r"data\new_car1_train.txt", motor_train_path + file_name + ".txt")
             # break
-    formatFile(r"data\new_car2_train.txt")
+    # formatFile(r"data\new_car2_train.txt")
