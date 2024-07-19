@@ -98,8 +98,6 @@ def randomSortData(path,random_seed,if_random):
 
 def loadData(path,device,random_state,if_random):
     total_data_list = randomSortData(path,35,if_random)
-def loadData(path,device,random_state,if_random):
-    total_data_list = randomSortData(path,35,if_random)
     data_label = []
     real_data = []
     cmd_data = []
@@ -111,10 +109,8 @@ def loadData(path,device,random_state,if_random):
         real_list = data_list[1:int((len_data_list-1)/2)+1]
         cmd_list = data_list[int((len_data_list-1)/2)+1:]
         #可能导致比较大的问题
-        #可能导致比较大的问题
         while len(real_list) >input_size:
             real_list.pop(0)
-        while len(cmd_list) >input_size:
         while len(cmd_list) >input_size:
             cmd_list.pop(0)
         if len(real_list) == input_size:
@@ -126,10 +122,7 @@ def loadData(path,device,random_state,if_random):
     # real_data = scaler.fit_transform(real_data)
     # scaler = MinMaxScaler(feature_range=(-1, 1))
     # cmd_data = scaler.fit_transform(cmd_data)
-    # scaler = MinMaxScaler(feature_range=(-1, 1))
-    # real_data = scaler.fit_transform(real_data)
-    # scaler = MinMaxScaler(feature_range=(-1, 1))
-    # cmd_data = scaler.fit_transform(cmd_data)
+
     len_data = int(len(real_data)*(1 - random_state))
     real_data = torch.tensor(real_data).to(device)
     cmd_data = torch.tensor(cmd_data).to(device)
@@ -268,6 +261,7 @@ def test(device):
         plt.grid(axis='y')
         plt.legend()
         plt.show()
+·
 if __name__== "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # print(torch.cuda.is_available())
