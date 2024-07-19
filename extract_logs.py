@@ -34,12 +34,16 @@ def extractLog(dir,tar_dir, command):
 
 if __name__ == "__main__":
 
+
     # 指定要遍历的文件夹路径
     root_directory_path =   r'data\\new_dataset_car1\\'
 
     orin_path = root_directory_path + r'data_set\\'
     motor_real_path = root_directory_path+r'real_speed\\'
     motor_cmd_path = root_directory_path+r"cmd_speed\\"
+    motor_compared_path = root_directory_path+r"compared_speed\\"
+    motor_train_path = root_directory_path+r"train_speed\\"
+
     motor_compared_path = root_directory_path+r"compared_speed\\"
     motor_train_path = root_directory_path+r"train_speed\\"
 
@@ -61,4 +65,5 @@ if __name__ == "__main__":
             generateTrainData(motor_train_path + file_name + ".txt",motor_compared_path + file_name + ".txt")
             mergeData(r"data\new_car1_train.txt", motor_train_path + file_name + ".txt")
             # break
+    # formatFile(r"data\new_car2_train.txt")
     # formatFile(r"data\new_car2_train.txt")

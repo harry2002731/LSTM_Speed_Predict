@@ -10,6 +10,7 @@ from scipy.interpolate import make_interp_spline
 from sklearn.preprocessing import MinMaxScaler
 import random
 import time
+from modelLSTM import MultiInputLSTM
 batch_size = 128
 input_size = 35
 hidden_size = 16
@@ -18,6 +19,7 @@ num_layers = 3
 output_size = 1
 num_epochs = 1500
 # 学习率
+learning_rate = 0.002
 learning_rate = 0.002
 # betas参数
 betas = (0.95, 0.999)
@@ -69,8 +71,33 @@ def randomSortData(path,random_seed,if_random):
                 data_list = [float(item) for item in data_list]
                 total_data_list.append(data_list)
                 line = f.readline() # 读取下一行
+def randomSortData(path,random_seed,if_random):
+    if if_random:
+        random.seed(random_seed)  
+        total_data_list = []
+        with open(path, "r") as f:
+            line = f.readline() # 读取第一行
+            while line:
+                data_list = line.split(" ")
+                data_list.pop()
+                data_list = [float(item) for item in data_list]
+                total_data_list.append(data_list)
+                line = f.readline() # 读取下一行
+        random.shuffle(total_data_list)
+    else:
+        total_data_list = []
+        with open(path, "r") as f:
+            line = f.readline() # 读取第一行
+            while line:
+                data_list = line.split(" ")
+                data_list.pop()
+                data_list = [float(item) for item in data_list]
+                total_data_list.append(data_list)
+                line = f.readline() # 读取下一行
     return total_data_list
 
+def loadData(path,device,random_state,if_random):
+    total_data_list = randomSortData(path,35,if_random)
 def loadData(path,device,random_state,if_random):
     total_data_list = randomSortData(path,35,if_random)
     data_label = []
@@ -84,8 +111,10 @@ def loadData(path,device,random_state,if_random):
         real_list = data_list[1:int((len_data_list-1)/2)+1]
         cmd_list = data_list[int((len_data_list-1)/2)+1:]
         #可能导致比较大的问题
+        #可能导致比较大的问题
         while len(real_list) >input_size:
             real_list.pop(0)
+        while len(cmd_list) >input_size:
         while len(cmd_list) >input_size:
             cmd_list.pop(0)
         if len(real_list) == input_size:
@@ -93,6 +122,10 @@ def loadData(path,device,random_state,if_random):
             real_data.append(np.array(real_list))
             cmd_data.append(np.array(cmd_list))
 
+    # scaler = MinMaxScaler(feature_range=(-1, 1))
+    # real_data = scaler.fit_transform(real_data)
+    # scaler = MinMaxScaler(feature_range=(-1, 1))
+    # cmd_data = scaler.fit_transform(cmd_data)
     # scaler = MinMaxScaler(feature_range=(-1, 1))
     # real_data = scaler.fit_transform(real_data)
     # scaler = MinMaxScaler(feature_range=(-1, 1))
@@ -106,74 +139,6 @@ def loadData(path,device,random_state,if_random):
     test_list = [real_data[len_data:-1],cmd_data[len_data:-1],data_label[len_data:-1]]
 
     return train_list,test_list
-
-
-
-class LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size):
-        super(LSTMModel, self).__init__()
-        self.CMD_LSTM = nn.LSTM(input_size, 32, num_layers, batch_first=True)
-        self.Real_LSTM = nn.LSTM(input_size, 32, num_layers, batch_first=True)
-        self.concat_LSTM = nn.LSTM(32, 64, 5, batch_first=True)
-        self.fc = nn.Linear(64, output_size)
-        self.dropout = nn.Dropout(0.5)
-
-        self.embedding = nn.Embedding(num_embeddings=70, embedding_dim=25)
-
-    def forward(self, x1,x2):
-
-        real_out, _ = self.Real_LSTM(x1)
-        cmd_out, _ = self.CMD_LSTM(x2) # LSTM层
-        cmd_out = self.dropout(cmd_out)
-        real_out = self.dropout(real_out)
-
-        out = (real_out + cmd_out)/2
-        out,_ = self.concat_LSTM(out)
-        out = self.dropout(out)
-
-        out2 = self.fc(out[:, -1, :]) # 全连接层
-        return out2
-    
-class MultiInputLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size):
-        super(MultiInputLSTM, self).__init__()
-        self.CMD_LSTM = nn.LSTM(input_size, 64, 5, batch_first=True,dropout=0.1)
-        self.bn1 = nn.BatchNorm1d(64)
-
-        self.Real_LSTM = nn.LSTM(input_size, 64, 5, batch_first=True,dropout=0.1)
-        self.bn2 = nn.BatchNorm1d(64)
-
-        self.concat_LSTM = nn.LSTM(496, 512, 5, batch_first=True,dropout=0.4)
-        self.bn3 = nn.BatchNorm1d(512)
-
-        self.conv_layer1 = nn.Sequential(nn.Conv1d(in_channels=1, out_channels=8, kernel_size=6,padding=2))
-        self.conv_layer2 = nn.Sequential(nn.Conv1d(in_channels=1, out_channels=8, kernel_size=6,padding=2))
-
-        self.conv_layer3 = nn.Sequential(nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(2,1)))
-        self.max_pooling = nn.MaxPool1d(3, stride=2)
-        self.relu =  nn.ReLU(inplace=False)
-
-        self.fc = nn.Linear(512, output_size)
-
-    def forward(self, x1,x2):
-        x1 = x1.view(-1,1,input_size)
-        real_out, _ = self.Real_LSTM(x1)
-        real_out_bn = self.bn1(real_out[:, -1, :]) 
-
-        x2 = x2.view(-1,1,input_size)
-        cmd_out, _ = self.CMD_LSTM(x2) 
-        cmd_out_bn = self.bn2(cmd_out[:, -1, :]) 
-        
-        stack_data = torch.stack((real_out_bn,cmd_out_bn),dim=0).permute(1, 0, 2)
-        stack_data = stack_data.view(-1,1,2,64)
-        stack_data = self.relu(self.conv_layer3(stack_data))
-        stack_data = stack_data.view(-1,16,64)
-        out = self.max_pooling(stack_data)    
-        out = out.view(-1,1,496)
-
-        out,_ = self.concat_LSTM(out)
-        out = self.fc(out[:, -1, :]) # 全连接层
-        return out
 
 def train(device):
     stary_time = time.time()
@@ -191,7 +156,9 @@ def train(device):
 
     # 创建模型实例
     model = MultiInputLSTM(input_size, hidden_size, num_layers, output_size).to(device)
+    model = model.to(device, dtype=torch.float64)
 
+    scaler = torch.cuda.amp.GradScaler()
     # 创建Adam优化器
     optimizer = optim.Adam(
         model.parameters(),
@@ -206,14 +173,16 @@ def train(device):
     print('TRAINING STARTED.\n')
     for epoch in range(num_epochs):
         for i, (motor_data, train_labels) in enumerate(dataloader):
+            start_time = time.time()
+
             # pass
             model.train()
             real_motor = motor_data[0]                
             cmd_motor = motor_data[1]                
             real_motor = real_motor.view(-1, 1, input_size)
             cmd_motor = cmd_motor.view(-1, 1, input_size)
-            model = model.to(device, dtype=torch.float64)
 
+            start2_time = time.time()
             outputs = model(real_motor,cmd_motor)
             train_labels = train_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
             outputs *= 100
@@ -223,7 +192,10 @@ def train(device):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+            print("load data"+ str(time.time()-start2_time) + str(start2_time-start_time))
+            # print(torch.cuda.get_device_properties(0).total_memory)  # 总显存
+            # print(torch.cuda.memory_allocated(0))  # 已分配的显存
+            # print(torch.cuda.memory_cached(0))  # 缓存的显存
             iter += 1
             if iter % 500 == 0:
                 model.eval()
@@ -282,6 +254,8 @@ def test(device):
             if iter % 100 == 0:
                 print(f'Iteration: {iter}\t Loss: {loss.item():.4f}')
         # pred = pred.cpu()
+        print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
+
         print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
 
         n = i
