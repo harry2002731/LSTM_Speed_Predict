@@ -6,9 +6,13 @@ def real_match_line(line):
     return keyword in line
 
 def cmd_match_line(line):
-    keyword2 = "MotorCmd"
-    keyword3 = "GDMotorCmd"
-    return keyword2 in line and keyword3 not in line
+    keyword1 = "MotorCmd"
+    keyword2 = "GDMotorCmd"
+    return keyword1 in line and keyword2 not in line
+
+def expect_match_line(line):
+    keyword1 = "ForkMotors"
+    return keyword1 in line
 
 def extractLog(dir,tar_dir, command):
     # 遍历目录下的所有文件和子目录
@@ -39,31 +43,28 @@ if __name__ == "__main__":
     root_directory_path =   r'data\\new_dataset_car1\\'
 
     orin_path = root_directory_path + r'data_set\\'
-    motor_real_path = root_directory_path+r'real_speed\\'
-    motor_cmd_path = root_directory_path+r"cmd_speed\\"
-    motor_compared_path = root_directory_path+r"compared_speed\\"
-    motor_train_path = root_directory_path+r"train_speed\\"
+    real_speed_p = root_directory_path+r'extracted_data\\real_speed\\'
+    cmd_speed_p = root_directory_path+r"extracted_data\\cmd_speed\\"
+    expect_speed_p = root_directory_path+r"extracted_data\\expect_speed\\"
 
-    motor_compared_path = root_directory_path+r"compared_speed\\"
-    motor_train_path = root_directory_path+r"train_speed\\"
+    motor_compared_path = root_directory_path+r"compared_data\\"
+    motor_train_path = root_directory_path+r"train_data\\"
 
-    # 调用函数并打印结果
-    # extractRealLog(directory_path,motor_real_directory_path)
-    extractLog(orin_path,motor_cmd_path, cmd_match_line)
-    extractLog(orin_path,motor_real_path, real_match_line)
+    # 提取符合要求的字段
+    extractLog(orin_path,cmd_speed_p, cmd_match_line)
+    extractLog(orin_path,real_speed_p, real_match_line)
+    extractLog(orin_path,expect_speed_p, expect_match_line)
 
     with open(r"data\new_car1_train.txt", "a") as file:
         file.truncate(0)
     for root, dirs, files in os.walk(orin_path):
         for file_name in files:
-            motor_reals = decodeMotorReal(motor_real_path + file_name + ".txt")
-            motor_cmds = decodeMotorCMD(motor_cmd_path + file_name + ".txt")
-            motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
-
-            # matchData(motor_reals,motor_cmds,r"data\new_car2_train.txt")
-            matchData(motor_reals,motor_cmds,motor_compared_path + file_name + ".txt")
-            generateTrainData(motor_train_path + file_name + ".txt",motor_compared_path + file_name + ".txt")
+            real_speeds = decodeMotorSpeeed(real_speed_p + file_name + ".txt", MotorReal)
+            cmd_speeds = decodeMotorSpeeed(cmd_speed_p + file_name + ".txt",MotorCmd)
+            expect_speeds = decodeMotorSpeeed(expect_speed_p + file_name + ".txt",MotorExpect)
+            
+            matchData(real_speeds,cmd_speeds,expect_speeds, motor_compared_path + file_name + ".txt", True)
+            generateTrainData(motor_train_path + file_name + ".txt",motor_compared_path + file_name + ".txt", 1.5, 0.05,True)
             mergeData(r"data\new_car1_train.txt", motor_train_path + file_name + ".txt")
             # break
-    # formatFile(r"data\new_car2_train.txt")
     # formatFile(r"data\new_car2_train.txt")

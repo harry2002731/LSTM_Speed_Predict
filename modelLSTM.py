@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
 from sklearn.preprocessing import MinMaxScaler
 
-batch_size = 128
-input_size = 35
+batch_size = 512
+input_size = 30
 hidden_size = 16
 hidden_size2 = 32
 num_layers = 3
@@ -36,7 +36,7 @@ class MultiInputLSTM(nn.Module):
         self.Real_LSTM = nn.LSTM(input_size, 64, 5, batch_first=True,dropout=0.1)
         self.bn2 = nn.BatchNorm1d(64)
 
-        self.concat_LSTM = nn.LSTM(496, 512, 5, batch_first=True,dropout=0.4)
+        self.concat_LSTM = nn.LSTM(496, 512, 5, batch_first=True,dropout=0.2)
         self.bn3 = nn.BatchNorm1d(512)
 
         self.conv_layer1 = nn.Sequential(nn.Conv1d(in_channels=1, out_channels=8, kernel_size=6,padding=2))

@@ -11,13 +11,13 @@ from sklearn.preprocessing import MinMaxScaler
 import random
 import time
 from modelLSTM import MultiInputLSTM
-batch_size = 128
-input_size = 35
+batch_size = 512
+input_size = 30
 hidden_size = 16
 hidden_size2 = 32
 num_layers = 3
 output_size = 1
-num_epochs = 1500
+num_epochs = 2000
 # 学习率
 learning_rate = 0.002
 learning_rate = 0.002
@@ -48,29 +48,6 @@ class Mydataset(data.Dataset):
     def __len__(self):
         return len(self.idx)
     
-def randomSortData(path,random_seed,if_random):
-    if if_random:
-        random.seed(random_seed)  
-        total_data_list = []
-        with open(path, "r") as f:
-            line = f.readline() # 读取第一行
-            while line:
-                data_list = line.split(" ")
-                data_list.pop()
-                data_list = [float(item) for item in data_list]
-                total_data_list.append(data_list)
-                line = f.readline() # 读取下一行
-        random.shuffle(total_data_list)
-    else:
-        total_data_list = []
-        with open(path, "r") as f:
-            line = f.readline() # 读取第一行
-            while line:
-                data_list = line.split(" ")
-                data_list.pop()
-                data_list = [float(item) for item in data_list]
-                total_data_list.append(data_list)
-                line = f.readline() # 读取下一行
 def randomSortData(path,random_seed,if_random):
     if if_random:
         random.seed(random_seed)  
@@ -135,7 +112,7 @@ def loadData(path,device,random_state,if_random):
 
 def train(device):
     stary_time = time.time()
-    train_, test_ = loadData(r"data\train.txt",device,0.5,True)
+    train_, test_ = loadData(r"data\train.txt",device,0.6,True)
     test_data, test_data_2 ,test_labels = test_
     train_data, train_data_2 ,train_labels = train_
     dataset = Mydataset(train_data,train_data_2, train_labels)
@@ -185,10 +162,6 @@ def train(device):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            print("load data"+ str(time.time()-start2_time) + str(start2_time-start_time))
-            # print(torch.cuda.get_device_properties(0).total_memory)  # 总显存
-            # print(torch.cuda.memory_allocated(0))  # 已分配的显存
-            # print(torch.cuda.memory_cached(0))  # 缓存的显存
             iter += 1
             if iter % 500 == 0:
                 model.eval()
@@ -249,8 +222,6 @@ def test(device):
         # pred = pred.cpu()
         print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
 
-        print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
-
         n = i
         y, pred = np.array(y), np.array(pred)
         x = [i for i in range(0, n)]
@@ -261,10 +232,10 @@ def test(device):
         plt.grid(axis='y')
         plt.legend()
         plt.show()
-·
+
 if __name__== "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # print(torch.cuda.is_available())
-    # train(device)
+    train(device)
     test(device)
 

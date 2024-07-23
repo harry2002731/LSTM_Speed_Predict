@@ -164,8 +164,6 @@ class MotorDataProcess():
     def filter(self):
         if self.calRepRate(self.data) > 0.999:
             self.use = False
-        if self.calRepRate(self.data) > 0.999:
-            self.use = False
         if len(self.data) < 30:
             self.use = False
         return self.use
@@ -194,10 +192,8 @@ def formatFile(path):
                 write_file.write(str(line))
 
 # 数据时间戳匹配
-
-
 def matchData(motor_reals, motor_cmds, motor_expects, path, debug=False):
-    threshold = 0.05
+    threshold = 0.1
     real_data = np.array([d.time_info.time for d in motor_reals])
     cmd_data = np.array([d.time_info.time for d in motor_cmds])
     expect_data = np.array([d.time_info.time for d in motor_expects])
@@ -208,6 +204,7 @@ def matchData(motor_reals, motor_cmds, motor_expects, path, debug=False):
 
     len1, len2, len3 = len(real_data), len(cmd_data), len(expect_data)
     with open(path, "a+") as file:
+        file.truncate(0)
         cmd_temp = []
         real_temp = []
         expect_temp = []
@@ -216,7 +213,7 @@ def matchData(motor_reals, motor_cmds, motor_expects, path, debug=False):
         idx1, idx2, idx3 = 0, 0, 0
 
         # 同时遍历三个数组
-        while idx1 < len1 and idx2 < len2 and idx3 < len3:
+        while idx1 < len1 and idx2 < len2 and idx3 < len3-2:
             timestamp1 = real_data[idx1]
         # 使用二分查找在array2和array3中查找接近的时间戳
             left2 = np.searchsorted(
@@ -230,6 +227,9 @@ def matchData(motor_reals, motor_cmds, motor_expects, path, debug=False):
 
             # 检查索引是否有效
             if left2 < right2 and left3 < right3:
+                file.write(str(timestamp1)+" "+str(round(real_data_speed[idx1], 3))+" "+str(round(cmd_data_speed[left2], 3))+" " + str(round(expect_data_speed[left3], 3))+" ")
+                file.write("\n")
+                
                 if (debug):
                     matches.append(
                         (timestamp1, cmd_data[left2], expect_data[left3]))
@@ -238,65 +238,93 @@ def matchData(motor_reals, motor_cmds, motor_expects, path, debug=False):
                         [cmd_data[left2], round(cmd_data_speed[left2], 3)])
                     expect_temp.append(
                         [expect_data[left3], round(expect_data_speed[left3], 3)])
-
-                file.write(str(timestamp1)+" "+str(round(real_data_speed[idx1], 3))+" "+str(
-                    round(cmd_data_speed[left2], 3))+" " + str(round(expect_data_speed[left3], 3))+" ")
-                file.write("\n")
-
             # 更新索引
             idx1 += 1
             idx2 = max(idx2, left2)
             idx3 = max(idx3, left3)
 
-def generateTrainData(write_path, read_path):
+def readFile(path):
+    with open(path, "r") as file:
+        lines = file.readlines()
+        data_list = []
+        for line in lines:
+            line = line.replace(' \n', '').replace(' \r', '')
+            line = line.split(" ")
+            data_list.append([float(item) for item in line])
+
+    return data_list
+
+def generateTrainData(write_path, read_path, time_gap,interp_interval = 0.08, interp=False):
     with open(write_path, "a") as write_file:
         write_file.truncate(0)
-        with open(read_path, "r") as file:
-            lines = file.readlines()
-            data_list = []
-            for line in lines:
-                line = line.split(" ")
-                line.pop()
-                data_list.append([float(item) for item in line])
-            first_t = data_list[0][0]
-            for index, data in enumerate(data_list):
-                if data[0]-first_t >= 3.0:
-                    start_index = index+1
-                    break
-            len_list = []
-            for i in range(start_index, len(data_list)):
-                label = data_list[i][1]
-                real_temp = []
-                cmd_temp = []
-                t_temp = []
-                for item in data_list[0:i]:
-                    if 0.0 <= data_list[i][0] - item[0] <= 3.0:
-                        real_temp.append(item[1])
-                        cmd_temp.append(item[2])
-                        t_temp.append(item[0])
-                if len(real_temp) > 0:
+        
+        data_list = readFile(read_path)
+        
+        first_t = data_list[0][0]
+        for index, data in enumerate(data_list):
+            if data[0]-first_t >= time_gap:
+                start_index = index+1
+                break
+            
+        len_list = []
+        for i in range(start_index, len(data_list)):
+            label = data_list[i][1]
+            real_temp, cmd_temp,expect_temp, t_temp = [], [], [],[]
+
+            for item in data_list[0:i]:
+                if 0.0 <= data_list[i][0] - item[0] <= time_gap:
+                    t_temp.append(item[0])
+                    real_temp.append(item[1])
+                    cmd_temp.append(item[2])
+                    expect_temp.append(item[3])
+                    
+            # 重复率
+            if len(real_temp) > 0 and (len(real_temp) - len(set(real_temp)))/len(real_temp) < 0.9:
+                if are_timestamps_evenly_distributed(t_temp):
+
                     start_time = np.array(t_temp).min()
                     end_time = np.array(t_temp).max()
-                    if end_time-start_time > 2.8:
-                        if len(real_temp) > 30 and (len(real_temp) - len(set(real_temp)))/len(real_temp) < 0.9:
-                            new_timestamps = np.arange(
-                                end_time-3.0, end_time, 0.08)
-                            # 使用线性插值计算新时间点的速度
-                            real_temp = np.interp(
-                                new_timestamps, t_temp, real_temp)
-                            cmd_temp = np.interp(
-                                new_timestamps, t_temp, cmd_temp)
-                            len_list.append(len(real_temp))
-                            real_temp = ', '.join(str(element)
-                                                  for element in real_temp)
-                            cmd_temp = ', '.join(str(element)
-                                                 for element in cmd_temp)
-                            tmp_data = [label, real_temp, cmd_temp]
-                            for item in tmp_data:
-                                write_file.write(str(item)+" ")
-                            write_file.write("\n")
-        print(len(len_list), len_list)
+                    if end_time-start_time > time_gap * 0.9 and len(real_temp)>=20:
+                        if interp:
+                                new_timestamps = np.arange(end_time-time_gap, end_time, interp_interval)
+                                real_temp = np.round(np.interp(new_timestamps, t_temp, real_temp),3)
+                                cmd_temp = np.round(np.interp(new_timestamps, t_temp, cmd_temp),3)
+                                expect_temp = np.round(np.interp(new_timestamps, t_temp, expect_temp),3)
+                                            
+                        len_list.append(len(real_temp))
+                        real_temp = ' '.join(str(element)
+                                                for element in real_temp)
+                        cmd_temp = ' '.join(str(element)
+                                                for element in cmd_temp)
+                        expect_temp = ' '.join(str(element)
+                                                for element in expect_temp)
+                        tmp_data = [label, real_temp, cmd_temp]
+                        for item_ in tmp_data:
+                            write_file.write(str(item_)+" ")
+                        write_file.write("\n")
+        print(len_list)
 
+def are_timestamps_evenly_distributed(timestamps):
+    if len(timestamps) < 2:
+        # 如果数组中少于两个时间戳，无法判断是否均匀分布
+        return True
+
+    # 计算时间戳之间的间隔
+    intervals = [timestamps[i+1] - timestamps[i] for i in range(len(timestamps) - 1)]
+
+    # 计算平均间隔
+    average_interval = sum(intervals) / len(intervals)
+
+    # 检查每个间隔与平均间隔的差异是否在可接受的范围内
+    # 这里使用绝对值差的均值作为判断标准
+    interval_deviation = sum(abs(interval - average_interval) for interval in intervals) / len(intervals)
+    
+    # 定义一个阈值来决定是否认为时间戳是均匀分布的
+    # 这个阈值可以根据你的具体需求来调整
+    threshold = 0.08
+
+    # 如果间隔偏差小于阈值，则认为时间戳是均匀分布的
+    return interval_deviation < threshold
 
 def mergeData(write_path, read_path):
     # 读取源文件的全部内容
@@ -308,57 +336,6 @@ def mergeData(write_path, read_path):
         target_file.write(content)
 
         print("finsh")
-
-
-def generateTrainData(write_path, read_path):
-    with open(write_path, "a") as write_file:
-        write_file.truncate(0)
-        with open(read_path, "r") as file:
-            lines = file.readlines()
-            data_list = []
-            for line in lines:
-                line = line.split(" ")
-                line.pop()
-                data_list.append([float(item) for item in line])
-            first_t = data_list[0][0]
-            for index, data in enumerate(data_list):
-                if data[0]-first_t >= 3.0:
-                    start_index = index+1
-                    break
-            len_list = []
-            for i in range(start_index, len(data_list)):
-                label = data_list[i][1]
-                real_temp = []
-                cmd_temp = []
-                t_temp = []
-                for item in data_list[0:i]:
-                    if 0.0 <= data_list[i][0] - item[0] <= 3.0:
-                        real_temp.append(item[1])
-                        cmd_temp.append(item[2])
-                        t_temp.append(item[0])
-                if len(real_temp) > 0:
-                    start_time = np.array(t_temp).min()
-                    end_time = np.array(t_temp).max()
-                    if end_time-start_time > 2.8:
-                        if len(real_temp) > 30 and (len(real_temp) - len(set(real_temp)))/len(real_temp) < 0.9:
-                            new_timestamps = np.arange(
-                                end_time-3.0, end_time, 0.08)
-                            # 使用线性插值计算新时间点的速度
-                            real_temp = np.interp(
-                                new_timestamps, t_temp, real_temp)
-                            cmd_temp = np.interp(
-                                new_timestamps, t_temp, cmd_temp)
-                            len_list.append(len(real_temp))
-                            real_temp = ', '.join(str(element)
-                                                  for element in real_temp)
-                            cmd_temp = ', '.join(str(element)
-                                                 for element in cmd_temp)
-                            tmp_data = [label, real_temp, cmd_temp]
-                            for item in tmp_data:
-                                write_file.write(str(item)+" ")
-                            write_file.write("\n")
-        print(len(len_list), len_list)
-
 
 def mergeData(write_path, read_path):
     # 读取源文件的全部内容
