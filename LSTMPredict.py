@@ -52,7 +52,7 @@ input_size = 30
 total_data_list = []
 motor_real = []
 motor_cmd = []
-path = r"C:\Projects\Python\LSTM_Speed_Predict\data\111.txt"
+path = r"C:\Projects\Python\LSTM_Speed_Predict\data\new_dataset_car2\compared_speed\robokit_2024-07-09_11-32-22.13.log.txt"
 with open(path, "r") as f:
 	line = f.readline() # 读取第一行
 	while line:
