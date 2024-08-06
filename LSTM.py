@@ -15,13 +15,13 @@ import onnx
 import onnxruntime
 import MNN
 
-batch_size = 128
-input_size = 35
+batch_size = 512
+input_size = 30
 hidden_size = 16
 hidden_size2 = 32
 num_layers = 3
 output_size = 1
-num_epochs = 150
+num_epochs = 2000
 # 学习率
 learning_rate = 0.002
 # betas参数
