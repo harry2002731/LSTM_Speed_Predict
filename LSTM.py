@@ -98,10 +98,6 @@ def loadData(path,device,random_state,if_random):
             real_data.append(np.array(real_list))
             cmd_data.append(np.array(cmd_list))
 
-    # scaler = MinMaxScaler(feature_range=(-1, 1))
-    # real_data = scaler.fit_transform(real_data)
-    # scaler = MinMaxScaler(feature_range=(-1, 1))
-    # cmd_data = scaler.fit_transform(cmd_data)
     len_data = int(len(real_data)*(1 - random_state))
     real_data = torch.tensor(real_data).to(device)
     cmd_data = torch.tensor(cmd_data).to(device)
@@ -284,7 +280,7 @@ if __name__== "__main__":
     # print(torch.cuda.is_available())
     # train(device)
     # test(device)
-    # convert2ONNX()
+    convert2ONNX()
     ONNXRuntime()
     # ort_session = onnxruntime.InferenceSession("model.onnx",providers=["CUDAExecutionProvider"])
 
