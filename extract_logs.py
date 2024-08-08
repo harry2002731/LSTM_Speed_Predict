@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
 
     # 指定要遍历的文件夹路径
-    root_directory_path =   r'data\\new_dataset_car1\\'
+    root_directory_path =   r'data\\new_dataset_car2_600kg\\'
 
     orin_path = root_directory_path + r'data_set\\'
     real_speed_p = root_directory_path+r'extracted_data\\real_speed\\'
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     extractLog(orin_path,real_speed_p, real_match_line)
     extractLog(orin_path,expect_speed_p, expect_match_line)
 
-    with open(r"data\new_car1_train.txt", "a") as file:
+    with open(r"data\new_car2_600.txt", "a") as file:
         file.truncate(0)
     for root, dirs, files in os.walk(orin_path):
         for file_name in files:
@@ -65,6 +65,6 @@ if __name__ == "__main__":
             
             matchData(real_speeds,cmd_speeds,expect_speeds, motor_compared_path + file_name + ".txt", True)
             generateTrainData(motor_train_path + file_name + ".txt",motor_compared_path + file_name + ".txt", 1.5, 0.05,True)
-            mergeData(r"data\new_car1_train.txt", motor_train_path + file_name + ".txt")
+            mergeData(r"data\new_car2_600.txt", motor_train_path + file_name + ".txt")
             # break
     # formatFile(r"data\new_car2_train.txt")

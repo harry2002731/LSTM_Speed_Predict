@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 # *.txt
 *.zip
-
+*.pth
 # C extensions
 *.so
 # Distribution / packaging
