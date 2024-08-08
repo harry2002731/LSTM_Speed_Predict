@@ -146,8 +146,8 @@ def train(device):
             model.train()
             real_motor = motor_data[0]                
             cmd_motor = motor_data[1]                
-            real_motor = real_motor.view(-1, 1, input_size)
-            cmd_motor = cmd_motor.view(-1, 1, input_size)
+            real_motor = real_motor.view(-1, 1, input_size).to(dtype=torch.float64)
+            cmd_motor = cmd_motor.view(-1, 1, input_size).to(dtype=torch.float64)
 
             outputs = model(real_motor,cmd_motor)
             train_labels = train_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
@@ -180,10 +180,10 @@ def train(device):
                 print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f} model_saved:{model_saved}' ) 
     
     print(time.time()-start_time,f"num_epochs为{num_epochs}")
-    
+
+
 def test(device):
     loss_function = nn.MSELoss()
-
     model = torch.load(r"model.pth").to(device)
 
     train_, test_ = loadData(r"data/train.txt",device,1.0,False)
@@ -201,9 +201,8 @@ def test(device):
         for i, (images, test_labels) in enumerate(test_loader):
             imgs1 = images[0]                
             imgs2 = images[1]                
-            images = imgs1.view(-1, 1, input_size)
-            images2 = imgs2.view(-1, 1, input_size)
-
+            images = imgs1.view(-1, 1, input_size).to(dtype=torch.float64)
+            images2 = imgs2.view(-1, 1, input_size).to(dtype=torch.float64)
             outputs = model(images,images2)
             test_labels = test_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
 
@@ -222,16 +221,16 @@ def test(device):
         # pred = pred.cpu()
         print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
 
-        n = i
-        y, pred = np.array(y), np.array(pred)
-        x = [i for i in range(0, n)]
-        x_smooth = np.linspace(np.min(x), np.max(x), n)
-        plt.plot(x_smooth, y[0:n], c='green', marker='*', ms=1, alpha=0.75, label='true')
-        plt.plot(x_smooth, pred[0:n], c='red', marker='o', ms=1, alpha=0.75, label='pred')
-        plt.plot(x_smooth, loss_list[0:n], c='blue', marker='o', ms=1, alpha=0.75, label='loss')
-        plt.grid(axis='y')
-        plt.legend()
-        plt.show()
+        # n = i
+        # y, pred = np.array(y), np.array(pred)
+        # x = [i for i in range(0, n)]
+        # x_smooth = np.linspace(np.min(x), np.max(x), n)
+        # plt.plot(x_smooth, y[0:n], c='green', marker='*', ms=1, alpha=0.75, label='true')
+        # plt.plot(x_smooth, pred[0:n], c='red', marker='o', ms=1, alpha=0.75, label='pred')
+        # plt.plot(x_smooth, loss_list[0:n], c='blue', marker='o', ms=1, alpha=0.75, label='loss')
+        # plt.grid(axis='y')
+        # plt.legend()
+        # plt.show()
 
 # def convert2ONNX():
 #     print('\CONVERTING TORCH TO ONNX...\n')
