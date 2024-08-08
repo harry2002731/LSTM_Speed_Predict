@@ -6,30 +6,12 @@ import torch
 import torch.utils.data as data
 import torch.optim as optim
 import matplotlib.pyplot as plt
-from scipy.interpolate import make_interp_spline
-from sklearn.preprocessing import MinMaxScaler
-
-batch_size = 512
-input_size = 30
-hidden_size = 16
-hidden_size2 = 32
-num_layers = 3
-output_size = 1
-num_epochs = 900
-# 学习率
-learning_rate = 0.002
-# betas参数
-betas = (0.95, 0.999)
-# eps参数
-eps = 1e-8
-# 权重衰减
-weight_decay = 0
-# 是否使用AMSGrad
-amsgrad = True
 
 class MultiInputLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size):
+    def __init__(self, input_size, output_size):
         super(MultiInputLSTM, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
         self.CMD_LSTM = nn.LSTM(input_size, 64, 5, batch_first=True,dropout=0.1)
         self.bn1 = nn.BatchNorm1d(64)
 
@@ -49,11 +31,11 @@ class MultiInputLSTM(nn.Module):
         self.fc = nn.Linear(512, output_size)
 
     def forward(self, x1,x2):
-        x1 = x1.view(-1,1,input_size)
+        x1 = x1.view(-1,1,self.input_size)
         real_out, _ = self.Real_LSTM(x1)
         real_out_bn = self.bn1(real_out[:, -1, :]) 
 
-        x2 = x2.view(-1,1,input_size)
+        x2 = x2.view(-1,1,self.input_size)
         cmd_out, _ = self.CMD_LSTM(x2) 
         cmd_out_bn = self.bn2(cmd_out[:, -1, :]) 
         
@@ -68,3 +50,54 @@ class MultiInputLSTM(nn.Module):
         out = self.fc(out[:, -1, :]) # 全连接层
         return out
 
+
+
+class MultiInputCNNLSTM(nn.Module):
+    def __init__(self, input_size,  output_size):
+        super(MultiInputCNNLSTM, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.conv_layer1 = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=64, kernel_size=(2, 1)),
+        )
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu1 = nn.LeakyReLU(0.1, inplace=False)
+
+        self.conv_layer2 = nn.Sequential(
+            nn.Conv1d(in_channels=64, out_channels=128, kernel_size=1),
+        )
+        self.bn2 = nn.BatchNorm1d(128)
+        self.relu2 = nn.LeakyReLU(0.1, inplace=False)
+
+        self.conv_layer3 = nn.Sequential(
+            nn.Conv1d(in_channels=128, out_channels=64, kernel_size=1),
+        )
+        self.bn3 = nn.BatchNorm1d(64)
+        self.relu3 = nn.LeakyReLU(0.1, inplace=False)
+
+        self.max_pooling = nn.MaxPool2d((64, 3), stride=2)
+        self.concat_LSTM = nn.LSTM(64*30, 128, 5, batch_first=True, dropout=0.2)
+
+        self.fc = nn.Linear(128, 64)
+        self.fc2 = nn.Linear(64, output_size)
+
+    def forward(self, x1, x2):
+        stack_data = torch.stack((x1, x2), dim=1).permute(0, 2, 1, 3)
+        stack_data = self.conv_layer1(stack_data)
+        stack_data = self.bn1(stack_data)
+        stack_data = self.relu1(stack_data)
+
+        stack_data = self.conv_layer2(stack_data.view(-1, 64, 30))
+        stack_data = self.bn2(stack_data)
+        stack_data = self.relu2(stack_data)
+
+        stack_data = self.conv_layer3(stack_data)
+        stack_data = self.bn3(stack_data)
+        stack_data = self.relu3(stack_data)
+
+        stack_data = stack_data.view(-1, 1, 64 * 30)
+        # stack_data = self.max_pooling(stack_data)
+        out, _ = self.concat_LSTM(stack_data)
+        out = self.fc(out[:, -1, :])  # 全连接层
+        out = self.fc2(out)  # 全连接层
+        return out

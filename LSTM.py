@@ -10,22 +10,22 @@ from scipy.interpolate import make_interp_spline
 from sklearn.preprocessing import MinMaxScaler
 import random
 import time
-from modelLSTM import MultiInputLSTM
-import onnx
-import onnxruntime
-import MNN
+from modelLSTM import MultiInputLSTM,MultiInputCNNLSTM
+# import onnx
+# import onnxruntime
+# import MNN
 
-batch_size = 512
+batch_size = 256
 input_size = 30
 hidden_size = 16
 hidden_size2 = 32
 num_layers = 3
 output_size = 1
-num_epochs = 2000
+num_epochs = 1500
 # 学习率
 learning_rate = 0.002
 # betas参数
-betas = (0.95, 0.999)
+betas = (0.8, 0.999)
 # eps参数
 eps = 1e-8
 # 权重衰减
@@ -98,14 +98,10 @@ def loadData(path,device,random_state,if_random):
             real_data.append(np.array(real_list))
             cmd_data.append(np.array(cmd_list))
 
-    # scaler = MinMaxScaler(feature_range=(-1, 1))
-    # real_data = scaler.fit_transform(real_data)
-    # scaler = MinMaxScaler(feature_range=(-1, 1))
-    # cmd_data = scaler.fit_transform(cmd_data)
     len_data = int(len(real_data)*(1 - random_state))
-    real_data = torch.tensor(real_data).to(device)
-    cmd_data = torch.tensor(cmd_data).to(device)
-    data_label = torch.tensor(np.array(data_label)).to(device)
+    real_data = torch.tensor(real_data).to(device, dtype=torch.float32)
+    cmd_data = torch.tensor(cmd_data).to(device, dtype=torch.float32)
+    data_label = torch.tensor(np.array(data_label)).to(device, dtype=torch.float32)
 
     train_list = [real_data[0:len_data],cmd_data[0:len_data],data_label[0:len_data]]
     test_list = [real_data[len_data:-1],cmd_data[len_data:-1],data_label[len_data:-1]]
@@ -113,8 +109,9 @@ def loadData(path,device,random_state,if_random):
     return train_list,test_list
 
 def train(device):
+    min_loss = 1.0
     start_time = time.time()
-    train_, test_ = loadData(r"data/train.txt",device,0.5,True)
+    train_, test_ = loadData(r"data\train.txt",device,0.2,True)
     test_data, test_data_2 ,test_labels = test_
     train_data, train_data_2 ,train_labels = train_
     dataset = Mydataset(train_data,train_data_2, train_labels)
@@ -127,8 +124,9 @@ def train(device):
     loss_function = nn.MSELoss()
 
     # 创建模型实例
-    model = MultiInputLSTM(input_size, hidden_size, num_layers, output_size).to(device)
-    model = model.to(device, dtype=torch.float64)
+    # model = MultiInputLSTM(input_size, output_size).to(device)
+    model = MultiInputCNNLSTM(input_size, output_size).to(device)
+    model = model.to(device, dtype=torch.float32)
 
     # 创建Adam优化器
     optimizer = optim.Adam(
@@ -143,8 +141,7 @@ def train(device):
     print('TRAINING STARTED.\n')
     for epoch in range(num_epochs):
         for i, (motor_data, train_labels) in enumerate(dataloader):
-            start_time = time.time()
-
+            model_saved = False
             # pass
             model.train()
             real_motor = motor_data[0]                
@@ -176,9 +173,12 @@ def train(device):
                     test_labels *= 100
                     loss_.append(loss_function(outputs, test_labels).cpu().detach().numpy())
                 avg_ = np.mean(np.array(loss_))
-                print(f'Epoch: {epoch + 1}/{num_epochs}\t Iteration: {iter}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f}') 
-                
-    torch.save(model, r"model.pth")
+                if loss < min_loss:
+                    min_loss = loss
+                    model_saved = True
+                    torch.save(model, r"model.pth")
+                print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f} model_saved:{model_saved}' ) 
+    
     print(time.time()-start_time,f"num_epochs为{num_epochs}")
     
 def test(device):
@@ -233,49 +233,49 @@ def test(device):
         plt.legend()
         plt.show()
 
-def convert2ONNX():
-    print('\CONVERTING TORCH TO ONNX...\n')
-    model = torch.load(r"model.pth").to(device)
-    model.eval()
+# def convert2ONNX():
+#     print('\CONVERTING TORCH TO ONNX...\n')
+#     model = torch.load(r"model.pth").to(device)
+#     model.eval()
 
-    torch_input = torch.randn(batch_size, 1, input_size).to(device=device).to(dtype=torch.float64)
-    torch_input2 = torch.randn(batch_size, 1, input_size).to(device=device).to(dtype=torch.float64)
-    torch.onnx.export(model, (torch_input, torch_input2),"model.onnx",                  
-                  export_params=True,
-                  opset_version=17,  # 指定 ONNX 的操作集版本
-                  input_names=["input1", "input2"],  # 可以为每个输入指定名称
-                  output_names=["output"],  # 输出名称
-                  dynamic_axes={"input1": {0: "batch_size"},  # 指定可变长度的维度
-                                "input2": {0: "batch_size"}}
-                )
+#     torch_input = torch.randn(batch_size, 1, input_size).to(device=device).to(dtype=torch.float64)
+#     torch_input2 = torch.randn(batch_size, 1, input_size).to(device=device).to(dtype=torch.float64)
+#     torch.onnx.export(model, (torch_input, torch_input2),"model.onnx",                  
+#                   export_params=True,
+#                   opset_version=17,  # 指定 ONNX 的操作集版本
+#                   input_names=["input1", "input2"],  # 可以为每个输入指定名称
+#                   output_names=["output"],  # 输出名称
+#                   dynamic_axes={"input1": {0: "batch_size"},  # 指定可变长度的维度
+#                                 "input2": {0: "batch_size"}}
+#                 )
 
 
-def ONNXRuntime():
-    train_, test_ = loadData(r"data/train.txt",device,1.0,False)
-    test_data, test_data_2 ,test_labels = test_
+# def ONNXRuntime():
+#     train_, test_ = loadData(r"data/train.txt",device,1.0,False)
+#     test_data, test_data_2 ,test_labels = test_
 
-    dataset = Mydataset(test_data,test_data_2, test_labels)
-    test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
+#     dataset = Mydataset(test_data,test_data_2, test_labels)
+#     test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-    ort_session = onnxruntime.InferenceSession("model.onnx",providers=["CUDAExecutionProvider"])
+#     ort_session = onnxruntime.InferenceSession("model.onnx",providers=["CUDAExecutionProvider"])
 
-    # 将张量转化为ndarray格式
-    def to_numpy(tensor):
-        return tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
+#     # 将张量转化为ndarray格式
+#     def to_numpy(tensor):
+#         return tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
 
-    for i, (images, test_labels) in enumerate(test_loader):
-        imgs1 = images[0]                
-        imgs2 = images[1]                
-        images = imgs1.view(-1, 1, input_size)
-        images2 = imgs2.view(-1, 1, input_size)
-        # 构建输入的字典和计算输出结果
-        ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(images)
-                    ,ort_session.get_inputs()[1].name: to_numpy(images2)}
+#     for i, (images, test_labels) in enumerate(test_loader):
+#         imgs1 = images[0]                
+#         imgs2 = images[1]                
+#         images = imgs1.view(-1, 1, input_size)
+#         images2 = imgs2.view(-1, 1, input_size)
+#         # 构建输入的字典和计算输出结果
+#         ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(images)
+#                     ,ort_session.get_inputs()[1].name: to_numpy(images2)}
         
-        ort_outs = ort_session.run(None, ort_inputs)
-        print(ort_outs)
-        if i ==5:
-            break
+#         ort_outs = ort_session.run(None, ort_inputs)
+#         print(ort_outs)
+#         if i ==5:
+#             break
 # def MNNRuneTime():
 
 
@@ -283,10 +283,10 @@ if __name__== "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # device = torch.device("cpu")
     # print(torch.cuda.is_available())
-    # train(device)
-    # test(device)
+    train(device)
+    test(device)
     # convert2ONNX()
-    ONNXRuntime()
+    # ONNXRuntime()
     # ort_session = onnxruntime.InferenceSession("model.onnx",providers=["CUDAExecutionProvider"])
 
 
