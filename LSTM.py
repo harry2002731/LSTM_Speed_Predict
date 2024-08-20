@@ -10,10 +10,10 @@ from scipy.interpolate import make_interp_spline
 from sklearn.preprocessing import MinMaxScaler
 import random
 import time
-from modelLSTM import MultiInputLSTM
-import onnx
-import onnxruntime
-import MNN
+from modelLSTM import MultiInputLSTM,MultiInputCNNLSTM
+# import onnx
+# import onnxruntime
+# import MNN
 
 batch_size = 2048
 input_size = 50
@@ -160,6 +160,7 @@ def train(device, pretrained=False):
     #     scheduler = torch.optim.lr_sheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10,
     #  verbose=False, threshold=0.0001, threshold_mode='rel', cooldown=0, min_lr=0, eps=1e-08)
     iter = 0
+    min_loss = 1
     print("TRAINING STARTED.\n")
     start_time = time.time()
 
@@ -203,13 +204,13 @@ def train(device, pretrained=False):
                         loss_function(outputs, test_labels).cpu().detach().numpy()
                     )
                 avg_ = np.mean(np.array(loss_))
-                print(
-                    f"Epoch: {epoch + 1}/{num_epochs}\t Iteration: {iter}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f}"
-                )
-                # print(loss_)
-
-    torch.save(model, r"model/model.pth")
-    print(time.time() - start_time, f"num_epochs为{num_epochs}")
+                if loss < min_loss:
+                    min_loss = loss
+                    model_saved = True
+                    torch.save(model, r"model/model.pth")
+                print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f} model_saved:{model_saved}' ) 
+    
+    print(time.time()-start_time,f"num_epochs为{num_epochs}")
 
 
 def test(device):

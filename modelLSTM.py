@@ -85,7 +85,7 @@ output_size = 1
 
 
 class MultiInputLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size):
+    def __init__(self, input_size, output_size):
         super(MultiInputLSTM, self).__init__()
         self.input_size = input_size
         self.conv_layer1 = nn.Sequential(
