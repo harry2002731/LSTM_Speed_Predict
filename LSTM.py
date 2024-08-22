@@ -10,10 +10,10 @@ from scipy.interpolate import make_interp_spline
 from sklearn.preprocessing import MinMaxScaler
 import random
 import time
-from modelLSTM import MultiInputLSTM,MultiInputCNNLSTM
-# import onnx
-# import onnxruntime
-# import MNN
+from modelLSTM import MultiInputLSTM
+import onnx
+import onnxruntime
+import MNN
 
 batch_size = 2048
 input_size = 50
@@ -144,7 +144,7 @@ def train(device, pretrained=False):
         print("Load pretrained model \n")
         model = torch.load(r"model/model.pth").to(device)
     else:
-        model = MultiInputLSTM(input_size, hidden_size, num_layers, output_size).to(
+        model = MultiInputLSTM(input_size, output_size).to(
             device, dtype=torch.float64
         )
 
@@ -215,7 +215,7 @@ def train(device, pretrained=False):
 
 def test(device):
     loss_function = nn.MSELoss()
-    model = torch.load(r"model/model.pth").to(device)
+    model = torch.load(r"model/model.pth").to(device, dtype=torch.float64)
 
     train_, test_ = loadData(r"data/train.txt", device, 1.0, False)
     test_data, test_data_2, test_labels = test_
@@ -281,7 +281,7 @@ def test(device):
 
 def convert2ONNX():
     print("\CONVERTING TORCH TO ONNX...\n")
-    model = torch.load(r"model/model.pth").to(device)
+    model = torch.load(r"model/model.pth").to(device, dtype=torch.float64)
     model.eval()
 
     torch_input = (
