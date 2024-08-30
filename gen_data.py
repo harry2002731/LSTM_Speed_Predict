@@ -374,6 +374,7 @@ def generateTrainData(
     interp_interval=0.08,
     repetition_rate=0.9,
     interp=False,
+    difference = False
 ):
     with open(write_path, "a") as write_file:
         write_file.truncate(0)
@@ -409,6 +410,7 @@ def generateTrainData(
                     start_time = np.array(t_temp).min()
                     end_time = np.array(t_temp).max()
                     if end_time - start_time > time_gap * 0.8 and len(real_temp) >= 5:
+                        # 数据时间间隔插值
                         if interp:
                             new_timestamps = np.arange(
                                 end_time - time_gap + interp_interval,
@@ -418,20 +420,35 @@ def generateTrainData(
                             real_temp = np.round(
                                 np.interp(new_timestamps, t_temp, real_temp), 3
                             )
-                            cmd_temp = np.round(
-                                np.interp(new_timestamps, t_temp, cmd_temp), 3
-                            )
+                            if not difference:
+                                cmd_temp = np.round(
+                                    np.interp(new_timestamps, t_temp, cmd_temp), 3
+                                )
+                            else:
+                                new_cmd_timestamps = np.arange(
+                                    end_time - time_gap,
+                                    end_time + interp_interval,
+                                    interp_interval,
+                                ) 
+                                cmd_temp = np.round(
+                                    np.interp(new_cmd_timestamps, t_temp, cmd_temp), 3
+                                )
                             expect_temp = np.round(
                                 np.interp(new_timestamps, t_temp, expect_temp), 3
                             )
                         label = real_temp[-1]
+                        # 前后差值计算
+                        if difference:
+                            # real_temp = np.round(np.diff(real_temp),3)
+                            cmd_temp = np.round(np.diff(cmd_temp),3)
+                            # expect_temp = np.round(np.diff(expect_temp),3)
                         len_list.append(len(real_temp))
                         real_temp = " ".join(
-                            str(element) for element in real_temp[0:-1]
+                            str(element) for element in real_temp[0:-15]
                         )
-                        cmd_temp = " ".join(str(element) for element in cmd_temp[0:-1])
+                        cmd_temp = " ".join(str(element) for element in cmd_temp[0:-15])
                         expect_temp = " ".join(
-                            str(element) for element in expect_temp[0:-1]
+                            str(element) for element in expect_temp[0:-15]
                         )
                         tmp_data = [label, real_temp, cmd_temp]
                         for item_ in tmp_data:

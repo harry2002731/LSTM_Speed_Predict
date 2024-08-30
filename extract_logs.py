@@ -45,10 +45,11 @@ def extractLog(dir, tar_dir, command):
                     for item in contents[0]:
                         item.replace("\n", "")
                         f.write(str(item))
-
+data_set_type_enum = ["orin","modifyied"]
 
 if __name__ == "__main__":
-
+    data_type =  "modifyied"
+    compare_data = False
     sys = platform.system()
     # 指定要遍历的文件夹路径
     root_directory_path = r"data/roboshop_data/"
@@ -81,27 +82,38 @@ if __name__ == "__main__":
         file.truncate(0)
     with open("./data/train.txt", "a") as file:
         file.truncate(0)
-    for root, dirs, files in os.walk(orin_path):
-        for file_name in files:
-            # real_speeds = decodeMotorSpeed(real_speed_p + file_name + ".txt", MotorReal)
-            # cmd_speeds = decodeMotorSpeed(cmd_speed_p + file_name + ".txt",MotorCmd)
-            # expect_speeds = decodeMotorSpeed(expect_speed_p + file_name + ".txt",MotorExpect)
-            total_data = decodeMotorSpeed(total_speed_p + file_name + ".txt", MotorTotal)
-            writeFile(motor_compared_path + file_name + ".txt",total_data)
-            # matchData(real_speeds,cmd_speeds,expect_speeds, motor_compared_path + file_name + ".txt", True)
+
+    # 匹配数据并存放到compared中
+    if compare_data:
+        for root, dirs, files in os.walk(orin_path):
+            for file_name in files:
+                if data_type in data_set_type_enum and data_type ==  "orin":
+                    extractLog(orin_path,cmd_speed_p, cmd_match_line)
+                    extractLog(orin_path,real_speed_p, real_match_line)
+                    extractLog(orin_path,expect_speed_p, expect_match_line)
+                    real_speeds = decodeMotorSpeed(real_speed_p + file_name + ".txt", MotorReal)
+                    cmd_speeds = decodeMotorSpeed(cmd_speed_p + file_name + ".txt",MotorCmd)
+                    expect_speeds = decodeMotorSpeed(expect_speed_p + file_name + ".txt",MotorExpect)  
+                    matchData(real_speeds,cmd_speeds,expect_speeds, motor_compared_path + file_name + ".txt", True)
+
+                elif data_type in data_set_type_enum and data_type ==  "modifyied":
+                    total_data = decodeMotorSpeed(total_speed_p + file_name + ".txt", MotorTotal)
+                    writeFile(motor_compared_path + file_name + ".txt",total_data)
+    # 从compared的数据中生成训练数据到train文件夹中
+    for root, dirs, files in os.walk(motor_compared_path):
+        for file_name in files:                
             generateTrainData(
-                motor_train_path + file_name + ".txt",
-                motor_compared_path + file_name + ".txt",
-                1.0,
-                interp_interval=0.019,
-                repetition_rate=0.95,
+                motor_train_path + file_name,
+                motor_compared_path + file_name,
+                1.3,
+                interp_interval=0.02,
+                repetition_rate=0.8,
                 interp=True,
+                difference=True
             )
             mergeData(
                 root_directory_path + "/train.txt",
-                motor_train_path + file_name + ".txt",
+                motor_train_path + file_name,
             )
-    mergeData("./data/train.txt", root_directory_path + "/train.txt")
-
-    # break
+        mergeData("./data/train.txt", root_directory_path + "/train.txt")
     # formatFile(r"data\new_car2_train.txt")
