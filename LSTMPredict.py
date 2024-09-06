@@ -4,39 +4,9 @@ import torch
 from copy import deepcopy
 from LSTM import *
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import shutil
-# def loadDataTest(if_random):
-#     total_data_list = randomSortData(r"data/train.txt",30,if_random)
-#     data_label = []
-#     real_data = []
-#     cmd_data = []
-#     for data_list in total_data_list:
-
-#         data_list = [float(item) for item in data_list]
-#         label = data_list[0]
-#         len_data_list = len(data_list)
-#         real_list = data_list[1:int((len_data_list-1)/2)+1]
-#         cmd_list = data_list[int((len_data_list-1)/2)+1:]
-#         while len(real_list) >input_size:
-#             real_list.pop(0)
-#             cmd_list.pop(0)
-#         if len(real_list) == input_size:
-#             data_label.append(label)
-#             real_data.append(np.array(real_list))
-#             cmd_data.append(np.array(cmd_list))
-
-#     real_scaler = MinMaxScaler(feature_range=(-1, 1))
-#     cmd_scaler = MinMaxScaler(feature_range=(-1, 1))
-
-#     return real_scaler,cmd_scaler
-
-# 查找最后更新进文件夹的文件
+from scipy import stats
 
 # 创建实时绘制横纵轴变量
 x = []
@@ -96,7 +66,7 @@ def find_latest_file(directory):
     return last_file_name
 
 
-def loadDataSet(file_path="", last_file=False):
+def loadDataSet(file_path="", last_file=False, delete_zero = False):
     input_size = 50
     total_data_list = []
     motor_real = []
@@ -109,6 +79,7 @@ def loadDataSet(file_path="", last_file=False):
         latest_file_path = os.path.join(
             "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/", last_file_name)
         file_path = latest_file_path
+        
     with open(file_path, "r") as f:
         line = f.readline()  # 读取第一行
         while line:
@@ -123,6 +94,8 @@ def loadDataSet(file_path="", last_file=False):
             line = f.readline()  # 读取下一行
 
     for index, i in enumerate(total_data_list):
+        if delete_zero and i[3] == 0:
+            continue
         motor_t.append(i[0])
         motor_real.append(i[1])
         motor_cmd.append(i[2])
@@ -209,13 +182,13 @@ def continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=Fal
             moving_win += 1
             x = np.linspace(0, len(motor_real), len(motor_real))
             if if_plot:
-                ax.plot(x, motor_real, linewidth=3.0)  # 画出当前x列表和y列表中的值的图形
-                ax.plot(x, motro_expect, linewidth=3.0)  # 画出当前x列表和y列表中的值的图形
+                ax.plot(x, motor_real, linewidth=3.0)  
+                ax.plot(x, motro_expect, linewidth=3.0)  
 
                 x1 = np.linspace(input_size, input_size +
                                  len(current_index_0)-1, len(current_index_0))
                 ax.plot(x1, current_index_0, color='c',
-                        label='当前帧')  # 画出当前x列表和y列表中的值的图形
+                        label='当前帧')  
 
                 ax.scatter(predict_x, predict_y)
                 if pause:
@@ -228,7 +201,7 @@ def continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=Fal
                 else:
                     current_xlim = ax.get_xlim()
                     current_ylim = ax.get_ylim()
-                    plt.pause(0.001)  # 暂停一段时间，不然画的太快会卡住显示不出来
+                    plt.pause(0.001)  
                     ax.cla()  # 清除图形
                     ax.set_xlim(current_xlim)
                     ax.set_ylim(current_ylim)
@@ -257,30 +230,30 @@ def speed_control(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=False)
 
                 cur_t = motor_t[cur_index]
                 cur_t_interp = np.arange(cur_t-0.98, cur_t + 0.02, 0.02) 
-                cur_cmd_t_interp = np.arange(cur_t-1.0, cur_t, 0.02)  # 当前帧(为了取到当前时间所以，所以调整了相加的时间)
+                cur_cmd_t_interp = np.arange(cur_t-0.98, cur_t-0.01, 0.02)  # 当前帧(为了取到当前时间所以，所以调整了相加的时间)
 
                 cur_real_interp = np.round(
                     np.interp(cur_t_interp, cur_t_not_interp, cur_real_not_interp), 3)
                 
                 cur_cmd_interp = np.round(
                     np.interp(cur_cmd_t_interp, cur_t_not_interp, cur_cmd_not_intep), 3)
-                if len(cur_cmd_interp) > len(cur_t_interp) + 1:
+                if len(cur_cmd_interp) >= 50:
                     cur_cmd_interp = np.delete(cur_cmd_interp,0)
-                cur_cmd_interp1 = np.round(np.diff(cur_cmd_interp),3)
+                # cur_cmd_interp1 = np.round(np.diff(cur_cmd_interp),3)
 
                 cur_real = cur_real_interp[-1]
-
-                cur_cmd_interp1 = np.append(cur_cmd_interp1,0.0)
+                cur_cmd_interp = np.append(cur_cmd_interp,0.0)
+                # cur_cmd_interp1 = np.append(cur_cmd_interp1,0.0)
                 i = -0.15
                 while i < 0.15:
-                    cur_cmd_interp1[-1] = i
+                    cur_cmd_interp[-1] = i
                     imgs1 = torch.tensor(np.array(cur_real_interp)).to(device)
-                    imgs2 = torch.tensor(np.array(cur_cmd_interp1)).to(device)
+                    imgs2 = torch.tensor(np.array(cur_cmd_interp)).to(device)
                     images = imgs1.view(-1, 1, input_size)
                     images2 = imgs2.view(-1, 1, input_size)
                     outputs = model(images, images2)
                     test_labels = outputs.unsqueeze(1)
-                    print(cur_cmd_interp[-1]+i,np.round(test_labels.item(), 3))
+                    print(cur_cmd_interp[-1],np.round(test_labels.item(), 3))
                     i+=0.01
                 print("********************")
                 predict_x.append(index + 50 + j)
@@ -307,32 +280,32 @@ def speed_control(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=False)
                 #     # print(abs(target-y))
 
             moving_win += 1
-            x = np.linspace(0, len(motor_real), len(motor_real))
-            if if_plot:
-                ax.plot(x, motor_real, linewidth=3.0)  # 画出当前x列表和y列表中的值的图形
-                ax.plot(x, motro_expect, linewidth=3.0)  # 画出当前x列表和y列表中的值的图形
+            # x = np.linspace(0, len(motor_real), len(motor_real))
+            # if if_plot:
+            #     ax.plot(x, motor_real, linewidth=3.0)  
+            #     ax.plot(x, motro_expect, linewidth=3.0)  
 
-                x1 = np.linspace(input_size, input_size +
-                                 len(current_index_0)-1, len(current_index_0))
-                ax.plot(x1, current_index_0, color='c',
-                        label='当前帧')  # 画出当前x列表和y列表中的值的图形
+            #     x1 = np.linspace(input_size, input_size +
+            #                      len(current_index_0)-1, len(current_index_0))
+            #     ax.plot(x1, current_index_0, color='c',
+            #             label='当前帧')  
 
-                ax.scatter(predict_x, predict_y)
-                if pause:
-                    plt.waitforbuttonpress()
-                    current_xlim = ax.get_xlim()
-                    current_ylim = ax.get_ylim()
-                    ax.cla()  # 清除图形
-                    ax.set_xlim(current_xlim)
-                    ax.set_ylim(current_ylim)
-                else:
-                    current_xlim = ax.get_xlim()
-                    current_ylim = ax.get_ylim()
-                    plt.pause(0.001)  # 暂停一段时间，不然画的太快会卡住显示不出来
-                    ax.cla()  # 清除图形
-                    ax.set_xlim(current_xlim)
-                    ax.set_ylim(current_ylim)
-                plt.ioff()  # 关闭画图窗口
+            #     ax.scatter(predict_x, predict_y)
+            #     if pause:
+            #         plt.waitforbuttonpress()
+            #         current_xlim = ax.get_xlim()
+            #         current_ylim = ax.get_ylim()
+            #         ax.cla()  # 清除图形
+            #         ax.set_xlim(current_xlim)
+            #         ax.set_ylim(current_ylim)
+            #     else:
+            #         current_xlim = ax.get_xlim()
+            #         current_ylim = ax.get_ylim()
+            #         plt.pause(0.001)  
+            #         ax.cla()  # 清除图形
+            #         ax.set_xlim(current_xlim)
+            #         ax.set_ylim(current_ylim)
+            #     plt.ioff()  # 关闭画图窗口
 
 
 
@@ -340,65 +313,132 @@ def speed_control(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=False)
 def visualizeDataset(motor_t,motor_real,motor_cmd,motro_expect):
     global delete
     global close
-    fig, ax = plt.subplots()
-
+    fig, ax = plt.subplots(figsize=(10, 8))
+    calCorrelation(motor_real,motor_cmd)
+    acc_list = calACC(motor_real,motro_expect)
     while not delete and not close:
-        # print(len(motor_real))
         fig.canvas.mpl_disconnect(
         fig.canvas.manager.key_press_handler_id)  # 取消默认快捷键的注册
         fig.canvas.mpl_connect('key_press_event', on_delete_press)
         x = np.linspace(0, len(motor_real), len(motor_real))
-        ax.plot(x, motor_real, linewidth=3.0, color='r')  # 画出当前x列表和y列表中的值的图形
-        ax.plot(x, motor_cmd, linewidth=3.0)  # 画出当前x列表和y列表中的值的图形
-        ax.plot(x, motro_expect, linewidth=3.0, color='b')  # 画出当前x列表和y列表中的值的图形
+        ax.plot(x, motor_real, linewidth=3.0, color='r')  
+        # ax.plot(x, motro_expect, linewidth=3.0, color='b')  
+        # ax.plot(x, np.array(motor_real) - np.array(motro_expect), linewidth=3.0, color='g')  
+        ax.plot(x, -np.array(motor_cmd) + np.array(motro_expect), linewidth=3.0)  
+
+        for item in acc_list:
+            plt.plot(item[0], 0, 'o')  # 'o' 表示用圆圈标记数据点
+            plt.text(item[0], 0, f'{np.round(item[2],2)}', ha='right', va='bottom')
+        plt.legend(['real',"expect","Acc"])
         plt.waitforbuttonpress()
-        plt.pause(0.001)  # 暂停一段时间，不然画的太快会卡住显示不出来
+        plt.pause(0.001)  
     ax.cla()  # 清除图形
     plt.close()  # 关闭画图窗口
     delete = False
     close = False
 
+def group_data(data, step=1):
+    if_find = False
+    find_index = 0
+    if not data:
+        return []
+    groups = []
+    for i in range(1, len(data)):
+        # 检查步长
+        if not if_find and i - find_index >= step:
+            if_find = True
+        if if_find:
+        # 检查是否上升到0或下降到0
+            if (data[i] == 0 and data[i-1] != 0) or (data[i-1] == 0 and data[i] != 0):
+                groups.append(i)
+                if_find = False
+                find_index = i
 
+    return groups
 
-def test(motor_t,motor_real,motor_cmd,motro_expect):
-    cur_t_interp = np.arange(motor_t[0], motor_t[-1], 0.02) 
-
-    """原始数据"""
-    y1 = np.array([motor_real])
-    y2 = np.array([motro_expect])
+# 分段计算贴合度    
+def calACC(data1,data2, thres = 0.01):
+    index = group_data(data2,5)
+    d1 = np.split(data1, index)
+    d2 = np.split(data2, index)
+    index.append(len(data2))
+    acc_list = []
+    for i,d in enumerate(d1):
+        minus_speed = abs(d1[i] - d2[i])
+        arr = (minus_speed < thres).astype(int)
+        ones_ratio = np.sum(arr) / arr.size
+        acc_list.append([index[i], data2[index[i]-1], ones_ratio])
+        # print("贴合度:",index[i], data2[index[i]-1], ones_ratio)
+    return acc_list
+# 计算数据的相关性
+def calCorrelation(data1, data2, delete_zero = False):
+    # 将数据转换为NumPy数组
+    data1 = np.array(data1)
+    data2 = np.array(data2)
+    if delete_zero:
+        zero_indices = np.where(data1 == 0)[0]
+        data1 = np.delete(data1, zero_indices)
+        data2 = np.delete(data2, zero_indices)
+    # 计算Pearson相关系数
+    pearson_corr, _ = stats.pearsonr(data1, data2)
+    # 计算Spearman相关系数
+    spearman_corr, _ = stats.spearmanr(data1, data2)
+ 
+    # 打印相关系数
+    print("Pearson相关系数: ", pearson_corr)
+    print("Spearman相关系数: ", spearman_corr)
     
-    cur_real_interp = np.round(np.interp(cur_t_interp, motor_t, motor_real), 3)
-    cur_cmd_interp = np.round(np.interp(cur_t_interp, motor_t, motro_expect), 3)
+# 计算数据的滞后性
+def calPeason(data_t, data1, data2, ax, if_plot = False):
+    cur_t_interp = np.arange(motor_t[0], motor_t[-1], 0.02) 
+    y1 = np.array([data1])
+    y2 = np.array([data2])
+    
+    # cur_cmd_interp = np.round(np.interp(cur_t_interp, motor_t, motor_cmd), 3)
+    # cur_real_interp = np.round(np.interp(cur_t_interp, motor_t, motor_real), 3)
                     
-    x = np.linspace(0, len(cur_real_interp), len(cur_real_interp))
-
-    # plt.plot(x, cur_real_interp)
-    # plt.plot(x, cur_cmd_interp)
+    x = np.linspace(0, len(y1), len(y1))
+    """利用pearson计算滞后性"""
+    # data_cor = pd.DataFrame(np.array([cur_real_interp, cur_cmd_interp]).T, columns=['y1', 'y2'])
+    # for i in range(5, 25):
+    #     data_cor[str(i)] = data_cor['y2'].shift(i) 
+    # data_cor.dropna(inplace=True)
+    # p = data_cor.corr()
+    # print("person相关系数：\n", data_cor.corr())
+    
+    # plt.plot(range(5, 25),data_cor.corr().iloc[0][2:].values)
     # plt.legend(['y1', 'y2'])
+    # plt.title('pearson')
+    # plt.xlabel('y2-lag_order')
     # plt.show()
 
-    """利用pearson计算滞后性"""
-    # 从图中可以看出y2滞后5阶
-    data_cor = pd.DataFrame(np.array([cur_real_interp, cur_cmd_interp]).T, columns=['y1', 'y2'])
-    for i in range(15, 35):
-        data_cor[str(i)] = data_cor['y2'].shift(i) 
-    data_cor.dropna(inplace=True)
-    p = data_cor.corr()
-    print("person相关系数：\n", data_cor.corr())
-    plt.plot(range(15, 35),data_cor.corr().iloc[0][2:].values)
-    plt.legend(['y1', 'y2'])
-    plt.title('pearson')
-    plt.xlabel('y2-lag_order')
-    plt.show()
-
     """利用互相关性计算滞后性"""
-    a = np.correlate(cur_real_interp, cur_cmd_interp, mode="same")
-    print("y1滞后y2：", len(a) // 2 - a.argmax())  # 若为负数，说明y1超前y2
-    plt.plot(x[:-15],cur_real_interp[15:]) # 结论y1超前y2五个单位。将y1时间向前错位即可重合
-    plt.plot(x, cur_cmd_interp)
-    plt.legend(['real', 'cmd'])
+    a = np.correlate(y2, y1, mode="same")
+    res = len(a) // 2 - a.argmax()
+    # if res != 0 :
+    print("y1滞后y2：", len(a) // 2 - a.argmax())  # 若为负数，说明y1提前y2
+    if if_plot:
+        if res > 0:
+            temp = len(x[:-res])
+            plt.plot(x, y1,)
+            plt.plot(x[:-res],y2[res:res+temp]) # 结论y1超前y2五个单位。将y1时间向前错位即可重合
+            plt.plot(x,y2[30:],linewidth=3.8) 
 
-    plt.show()
+        elif res == 0:
+            plt.plot(x, y1)
+            plt.plot(x,y2[30:])
+        elif res < 0:
+            a = np.correlate(y1, y2, mode="same")
+            res = len(a) // 2 - a.argmax()
+            temp = len(x[:res])
+            plt.plot(x, y1,)
+            plt.plot(x[:res],y2[res:res+temp]) # 结论y1超前y2五个单位。将y1时间向前错位即可重合
+            plt.plot(x,y2[30:],linewidth=3.8) 
+
+        plt.legend(['real',"cmd","or","oc"])
+        plt.pause(0.001)  
+        ax.cla()  # 清除图形
+    return res
     
 def testSingleData(model):
 
@@ -420,6 +460,8 @@ def testSingleData(model):
         i+=0.01
 
 
+    
+    
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = torch.load(r"model/model.pth").to(device)
@@ -428,12 +470,44 @@ if __name__ == "__main__":
     for root, dirs, files in os.walk(orin_path):
         global file_name
         for file_name in files:
-            motor_t,motor_real,motor_cmd,motro_expect = loadDataSet(orin_path+file_name,False)
+            motor_t,motor_real,motor_cmd,motro_expect = loadDataSet(orin_path+file_name,False,False)
             visualizeDataset(motor_t,motor_real,motor_cmd,motro_expect)
-            # plt.pause()
+            
+    motor_t,motor_real,motor_cmd,motro_expect = loadDataSet("/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/robokit_2024-08-22_16-49-57.0.log.txt",last_file=False)
+    # fig, ax = plt.subplots()
+    # aaa = []
+    # moving_win = 30
+    # need_data_len = 30
+    # if len(motor_real) >= input_size:
+    #     current_index_0 = []
+    #     acc, count = 0, 0
 
+    #     for index, item in enumerate(motor_cmd):
+    #         try:
+
+    #             predict_y = []
+    #             predict_x = []
+    #             for j in range(1):
+    #                 # next_index = moving_win + j + need_data_len + 1
+    #                 # next_t = motor_t[next_index]  # 下一帧数
+    #                 # next_real = motor_real[next_index]
+
+    #                 cur_index = moving_win + j + need_data_len
+    #                 cur_t_not_interp = motor_t[moving_win + j:cur_index + 1]  # 当前帧
+    #                 cur_cmd_not_intep = motor_cmd[moving_win + j -30: cur_index + 1]
+    #                 cur_real_not_interp = motor_real[moving_win + j:cur_index + 1]
+    #                 cur_expect_not_interp = motro_expect[moving_win + j:cur_index + 1]
+    #                 res = calPeason(cur_t_not_interp,cur_real_not_interp,cur_cmd_not_intep,cur_expect_not_interp,ax)
+    #                 if res != 0:
+    #                     aaa.append(res)
+    #                 moving_win += 1
+    #         except Exception as expection:
+    #             print(Exception)
+    # print(np.mean(np.array(aaa)))
+    visualizeDataset(motor_t,motor_real,motor_cmd,motro_expect)
+    # calACC(motor_real,motor_cmd,motro_expect)
     # testSingleData(model)
 
     # speed_control(motor_t,motor_real,motor_cmd,motro_expect,model,False)
-    # test(motor_t,motor_real,motor_cmd,motro_expect)
+    # calPeason(motor_t,motor_real,motor_cmd,motro_expect)
 	# continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,False)

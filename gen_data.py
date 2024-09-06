@@ -58,7 +58,6 @@ class MotorReal:
             if record:
                 str_ += i
 
-
 # 泵控电机控制指令
 class MotorCmd:
     def __init__(self) -> None:
@@ -92,7 +91,6 @@ class MotorCmd:
                 index += 1
             if record:
                 str_ += i
-
 
 # 泵控电机期望指令
 class MotorExpect:
@@ -132,8 +130,50 @@ class MotorExpect:
             if record:
                 str_ += i
 
+# 泵控电机真实值
+class ForkPosition:
+    def __init__(self) -> None:
+        self.time_info = TimeInfo()
+        self.odom_t = ""
+        self.loc = ""
+        self.speed = ""
+        self.current = ""
+        self.voltage = ""
+        self.stop = ""
+        self.error = ""
+        self.stop = ""
+        self.degree = ""
+        self.encoder = ""
+        self.error_code = ""
+        self.ori_location = ""
 
-# [240816 154856.719][51711153][SF][i] [***********Default argument][0.078|0.012|Actual|0|0|0|Accuracy|0|Search Count|0]
+    def decode(self, data_str):
+        str_ = ""
+        index = 0
+        record = False
+        for i in data_str:
+            if i == "[":
+                record = True
+                str_ = ""
+                continue
+            elif i == "]":
+                record = False
+                if index == 0:
+                    time_info = str_.split(" ")
+                    self.time_info.date = time_info[0]
+                    self.time_info.time = float(time_info[1])
+                elif index == 6:
+                    fork_position = str_.split("|")
+                    self.motor_name = fork_position[0]
+                    self.speed = float(fork_position[1])
+                    self.cur_pos = float(fork_position[2])
+                    self.tar_pos = float(fork_position[3])
+                index += 1
+            if record:
+                str_ += i
+    def getNeedStr(self):
+        return str(self.time_info.time)+" "+str(self.cur_pos)+" "+str(self.tar_pos)+"\n"
+
 
 
 # 泵控电机期望指令
@@ -174,6 +214,9 @@ class MotorTotal:
                 index += 1
             if record:
                 str_ += i
+    def getNeedStr(self):
+        return str(self.time_info.time)+" "+str(self.real)+" "+str(self.cmd)+" "+str(self.expect)+"\n"
+
 
 
 def decodeMotorSpeed(path, data_type):
@@ -294,6 +337,62 @@ def matchData(motor_reals, motor_cmds, motor_expects, path, debug=False):
             idx3 = max(idx3, left3)
 
 
+# 数据时间戳匹配
+def matchData2(motor_expects , postion_cur, postion_tar, path, debug=False):
+    threshold = 0.1
+    expect_data = np.array([d.time_info.time for d in motor_expects])
+    cur_data = np.array([d.time_info.time for d in postion_cur])
+    tar_data = np.array([d.time_info.time for d in postion_tar])
+
+    expect_data_speed = np.array([d.expect for d in motor_expects])
+    cur_data_speed = np.array([d.cur_pos for d in postion_cur])
+    tar_data_speed = np.array([d.tar_pos for d in postion_tar])
+
+    len1, len2, len3 = len(expect_data) , len(cur_data), len(tar_data)
+    with open(path, "a+") as file:
+        file.truncate(0)
+        # cmd_temp = []
+        # real_temp = []
+        # expect_temp = []
+        # matches = []
+
+        idx1, idx2, idx3 = 0, 0, 0
+
+        # 同时遍历三个数组
+        while idx1 < len1 and idx2 < len2 and idx3 < len3 - 2:
+            timestamp1 = expect_data[idx1]
+            # 使用二分查找在array2和array3中查找接近的时间戳
+            left2 = np.searchsorted(cur_data, timestamp1 - threshold, side="left")
+            right2 = np.searchsorted(cur_data, timestamp1 + threshold, side="right")
+            left3 = np.searchsorted(tar_data, timestamp1 - threshold, side="left")
+            right3 = np.searchsorted(tar_data, timestamp1 + threshold, side="right")
+
+            # 检查索引是否有效
+            if left2 < right2 and left3 < right3:
+                file.write(
+                    str(timestamp1)
+                    + " "
+                    + str(round(expect_data_speed[idx1], 3))
+                    + " "
+                    + str(round(cur_data_speed[left2], 3))
+                    + " "
+                    + str(round(tar_data_speed[left3], 3))
+                    + " "
+                )
+                file.write("\n")
+
+                # if debug:
+                #     matches.append((timestamp1, cmd_data[left2], expect_data[left3]))
+                #     real_temp.append([timestamp1, round(real_data_speed[idx1], 3)])
+                #     cmd_temp.append([cmd_data[left2], round(cmd_data_speed[left2], 3)])
+                #     expect_temp.append(
+                #         [expect_data[left3], round(expect_data_speed[left3], 3)]
+                #     )
+            # 更新索引
+            idx1 += 1
+            idx2 = max(idx2, left2)
+            idx3 = max(idx3, left3)
+
 def readFile(path):
     with open(path, "r") as file:
         lines = file.readlines()
@@ -313,7 +412,7 @@ def writeFile(path,data_list):
     with open(path, "a") as file:
         file.truncate(0)
         for line in data_list:
-            file.write(str(line.time_info.time)+" "+str(line.real)+" "+str(line.cmd)+" "+str(line.expect)+"\n")
+            file.write(line.getNeedStr())
 
 
 # def generateTrainData(write_path, read_path, time_gap,interp_interval = 0.08, repetition_rate = 0.9, interp=False):
@@ -377,6 +476,7 @@ def generateTrainData(
     difference = False
 ):
     with open(write_path, "a") as write_file:
+        file_name = write_path.split("/")[-1]
         write_file.truncate(0)
 
         data_list = readFile(read_path)
@@ -398,12 +498,12 @@ def generateTrainData(
                     real_temp.append(item[1])
                     cmd_temp.append(item[2])
                     expect_temp.append(item[3])
-
+            # if (
+            #     len(real_temp) > 0  and (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate and (len(expect_temp) - len(set(expect_temp))) / len(expect_temp) < repetition_rate
+            # ):
             # 重复率
             if (
-                len(real_temp) > 0
-                and (len(real_temp) - len(set(real_temp))) / len(real_temp)
-                < repetition_rate
+                len(real_temp) > 0  and (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate 
             ):
                 if are_timestamps_evenly_distributed(t_temp):
 
@@ -421,6 +521,7 @@ def generateTrainData(
                                 np.interp(new_timestamps, t_temp, real_temp), 3
                             )
                             if not difference:
+                                cmd_temp = np.array(expect_temp) - np.array(cmd_temp)
                                 cmd_temp = np.round(
                                     np.interp(new_timestamps, t_temp, cmd_temp), 3
                                 )
@@ -430,6 +531,7 @@ def generateTrainData(
                                     end_time + interp_interval,
                                     interp_interval,
                                 ) 
+
                                 cmd_temp = np.round(
                                     np.interp(new_cmd_timestamps, t_temp, cmd_temp), 3
                                 )
@@ -451,6 +553,7 @@ def generateTrainData(
                             str(element) for element in expect_temp[0:-15]
                         )
                         tmp_data = [label, real_temp, cmd_temp]
+                        write_file.write(file_name + " ")
                         for item_ in tmp_data:
                             write_file.write(str(item_) + " ")
                         write_file.write("\n")
@@ -486,7 +589,6 @@ def mergeData(write_path, read_path):
     # 读取源文件的全部内容
     with open(read_path, "r", encoding="utf-8") as source_file:
         content = source_file.read()
-
     # 将读取的内容写入目标文件
     with open(write_path, "a", encoding="utf-8") as target_file:
         target_file.write(content)

@@ -21,7 +21,7 @@ hidden_size = 16
 hidden_size2 = 32
 num_layers = 3
 output_size = 1
-num_epochs = 800
+num_epochs = 3000
 # 学习率
 learning_rate = 0.001
 # betas参数
@@ -35,10 +35,11 @@ amsgrad = True
 
 
 class Mydataset(data.Dataset):
-    def __init__(self, x1, x2, y):
+    def __init__(self, x1, x2, y,file_name):
         self.x1 = x1
         self.x2 = x2
         self.y = y
+        self.file_name = file_name
         self.idx = list()
         for i, item in enumerate(x1):
             self.idx.append([self.x1[i], self.x2[i]])
@@ -47,7 +48,8 @@ class Mydataset(data.Dataset):
     def __getitem__(self, index):
         input_data = self.idx[index]
         target = self.y[index]
-        return input_data, target
+        file_name = self.file_name[index]
+        return input_data, target, file_name
 
     def __len__(self):
         return len(self.idx)
@@ -62,8 +64,9 @@ def randomSortData(path, random_seed, if_random):
             while line:
                 data_list = line.split(" ")
                 data_list.pop()
-                data_list = [float(item) for item in data_list]
-                total_data_list.append(data_list)
+                data_l = [float(item) for item in data_list[1:]]
+                data_l.insert(0, data_list[0])
+                total_data_list.append(data_l)
                 line = f.readline()  # 读取下一行
         random.shuffle(total_data_list)
     else:
@@ -73,8 +76,10 @@ def randomSortData(path, random_seed, if_random):
             while line:
                 data_list = line.split(" ")
                 data_list.pop()
-                data_list = [float(item) for item in data_list]
-                total_data_list.append(data_list)
+                data_l = [float(item) for item in data_list[1:]]
+                data_l.insert(0, data_list[0])
+
+                total_data_list.append(data_l)
                 line = f.readline()  # 读取下一行
     return total_data_list
 
@@ -94,12 +99,14 @@ def loadData(path, device, random_state, if_random):
     - test_list: 包含测试集real数据、cmd数据和标签的列表。
     """
     total_data_list = randomSortData(path, 64, if_random)
+    file_name_list = []
     data_label = []
     real_data = []
     cmd_data = []
     for data_list in total_data_list:
 
-        data_list = [float(item) for item in data_list]
+        # data_list = [float(item) for item in data_list]
+        file_name = data_list.pop(0)
         label = data_list[0]
         len_data_list = len(data_list)
         real_list = data_list[1 : int((len_data_list - 1) / 2) + 1]
@@ -110,6 +117,7 @@ def loadData(path, device, random_state, if_random):
         while len(cmd_list) > input_size:
             cmd_list.pop(0)
         if len(real_list) == input_size:
+            file_name_list.append(file_name)
             data_label.append(label)
             real_data.append(np.array(real_list))
             cmd_data.append(np.array(cmd_list))
@@ -119,8 +127,8 @@ def loadData(path, device, random_state, if_random):
     cmd_data = torch.tensor(cmd_data).to(device)
     data_label = torch.tensor(np.array(data_label)).to(device)
 
-    train_list = [real_data[0:len_data], cmd_data[0:len_data], data_label[0:len_data]]
-    test_list = [real_data[len_data:-1], cmd_data[len_data:-1], data_label[len_data:-1]]
+    train_list = [real_data[0:len_data], cmd_data[0:len_data], data_label[0:len_data],file_name_list[0:len_data]]
+    test_list = [real_data[len_data:-1], cmd_data[len_data:-1], data_label[len_data:-1],file_name_list[len_data:-1]]
 
     return train_list, test_list
 
@@ -128,13 +136,13 @@ def loadData(path, device, random_state, if_random):
 def train(device, pretrained=False):
     start_time = time.time()
     train_, test_ = loadData(r"data/train.txt", device, 0.2, True)
-    test_data, test_data_2, test_labels = test_
-    train_data, train_data_2, train_labels = train_
-    dataset = Mydataset(train_data, train_data_2, train_labels)
+    test_data, test_data_2, test_labels, test_file_name= test_
+    train_data, train_data_2, train_labels,train_file_name = train_
+    dataset = Mydataset(train_data, train_data_2, train_labels, train_file_name)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-    test_dataset = Mydataset(test_data, test_data_2, test_labels)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    test_dataset = Mydataset(test_data, test_data_2, test_labels, test_file_name)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     # 定义损失函数和优化器
     loss_function = nn.MSELoss()
@@ -163,9 +171,9 @@ def train(device, pretrained=False):
     min_loss = 1
     print("TRAINING STARTED.\n")
     start_time = time.time()
-
     for epoch in range(num_epochs):
-        for i, (motor_data, train_labels) in enumerate(dataloader):
+        model_saved = False
+        for i, (motor_data, train_labels,train_file_name) in enumerate(dataloader):
             model.train()
             optimizer.zero_grad()  # 清空之前的梯度信息（如果有的话）
 
@@ -188,7 +196,9 @@ def train(device, pretrained=False):
             if iter % 500 == 0:
                 model.eval()
                 loss_ = []
-                for i, (images, test_labels) in enumerate(test_loader):
+                file_name_list = []
+                file_error_list = []
+                for i, (images, test_labels, test_file_name) in enumerate(test_loader):
                     test_real_motor = (
                         images[0].view(-1, 1, input_size).to(dtype=torch.float64)
                     )
@@ -200,10 +210,21 @@ def train(device, pretrained=False):
                     test_labels = test_labels.unsqueeze(1)
                     outputs *= 100
                     test_labels *= 100
-                    loss_.append(
-                        loss_function(outputs, test_labels).cpu().detach().numpy()
-                    )
+                    l = loss_function(outputs, test_labels).cpu().detach().numpy()
+
+                    loss_.append(l)
+                    if l > 1.5:
+                        # print(test_file_name,images,l)
+                        file_error_list.append([test_file_name[0],images,l])
+                        file_name_list.append(test_file_name[0])
                 avg_ = np.mean(np.array(loss_))
+                for name in set(file_name_list):
+                    print(name, file_name_list.count(name))
+                #     if (name == "robokit_2024-09-02_17-46-38.1.log.txt"):
+                #         for error in file_error_list:
+                #             if error[0] == name:
+                #                 print(error[0],outputs,test_labels,"|",list(error[1][0].cpu().detach().numpy()),list(error[1][1].cpu().detach().numpy()),error[-1])
+                    
                 if loss < min_loss:
                     min_loss = loss
                     model_saved = True
@@ -217,9 +238,9 @@ def test(device):
     loss_function = nn.MSELoss()
     model = torch.load(r"model/model.pth").to(device, dtype=torch.float64)
 
-    train_, test_ = loadData(r"data/train.txt", device, 1.0, False)
-    test_data, test_data_2, test_labels = test_
-    dataset = Mydataset(test_data, test_data_2, test_labels)
+    train_, test_ = loadData(r"data/train.txt", device, 0.8, False)
+    test_data, test_data_2, test_labels, test_file_name= test_
+    dataset = Mydataset(test_data, test_data_2, test_labels, test_file_name)
     test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     iter = 0
@@ -230,12 +251,12 @@ def test(device):
         pred, loss_list, y = [], [], []
         i = 0
         # Iterate through test dataset
-        for i, (images, test_labels) in enumerate(test_loader):
+        for i, (images, test_labels, test_file_name) in enumerate(test_loader):
             imgs1 = images[0]
             imgs2 = images[1]
-            images = imgs1.view(-1, 1, input_size).to(dtype=torch.float64)
+            images1 = imgs1.view(-1, 1, input_size).to(dtype=torch.float64)
             images2 = imgs2.view(-1, 1, input_size).to(dtype=torch.float64)
-            outputs = model(images, images2)
+            outputs = model(images1, images2)
             test_labels = test_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
 
             outputs *= 100
@@ -248,8 +269,19 @@ def test(device):
             loss_list.append(float(loss))
             # _, predicted = torch.max(outputs.data, 1)
             iter += 1
+            # if loss > 1:
+            #     print(images, images2)
+            
+            
+            # if loss > 1.5:
+                    # print(test_file_name,images,l)
+                # print(test_file_name[0],loss, outputs,test_labels,"|",list(images[0].cpu().detach().numpy()),list(images[1].cpu().detach().numpy()))
+                               
+                                
+                                
             if iter % 100 == 0:
                 print(f"Iteration: {iter}\t Loss: {loss.item():.4f}")
+                print(f"*************************************************************************")
         # pred = pred.cpu()
         print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
 
@@ -351,3 +383,4 @@ if __name__ == "__main__":
     convert2ONNX()
     ONNXRuntime()
     # ort_session = onnxruntime.InferenceSession("model.onnx",providers=["CUDAExecutionProvider"])
+# 当前位置、期望目标位置、期望下发速度
