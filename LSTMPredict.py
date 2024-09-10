@@ -105,7 +105,7 @@ def loadDataSet(file_path="", last_file=False, delete_zero = False):
 
 
 
-def continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=False):
+def continus_predict(motor_t,motor_real,motor_cmd,motor_expect,model,if_plot=False,if_difference = False):
     fig, ax = plt.subplots()
 
     moving_win = 0
@@ -120,25 +120,33 @@ def continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=Fal
 
                 next_index = moving_win + j + need_data_len + 1
                 next_t = motor_t[next_index]  # 下一帧数
-                next_real = motor_real[next_index]
+                next_real = motor_real[next_index+20]
 
                 cur_index = moving_win + j + need_data_len
                 cur_t_not_interp = motor_t[moving_win + j:cur_index + 1]  # 当前帧
                 cur_cmd_not_intep = motor_cmd[moving_win + j: cur_index + 1]
+                cur_expect_not_intep = motor_expect[moving_win + j: cur_index + 1]
                 cur_real_not_interp = motor_real[moving_win + j:cur_index + 1]
 
                 cur_t = motor_t[cur_index]
                 cur_t_interp = np.arange(cur_t-0.98, cur_t + 0.02, 0.02) 
-                cur_cmd_t_interp = np.arange(cur_t-1.0, cur_t + 0.02, 0.02)  # 当前帧(为了取到当前时间所以，所以调整了相加的时间)
+                cur_cmd_t_interp = np.arange(cur_t-0.98, cur_t + 0.02, 0.02)  # 当前帧(为了取到当前时间所以，所以调整了相加的时间)
 
+                if if_difference:
+                    cur_cmd_t_interp = np.arange(cur_t-1.0, cur_t + 0.02, 0.02)  # 当前帧(为了取到当前时间所以，所以调整了相加的时间)
+                
                 cur_real_interp = np.round(
                     np.interp(cur_t_interp, cur_t_not_interp, cur_real_not_interp), 3)
                 
+                cur_expect_interp = np.round(
+                    np.interp(cur_t_interp, cur_t_not_interp, cur_expect_not_intep), 3)    
+                           
                 cur_cmd_interp = np.round(
                     np.interp(cur_cmd_t_interp, cur_t_not_interp, cur_cmd_not_intep), 3)
-                if len(cur_cmd_interp) > len(cur_t_interp) + 1:
-                    cur_cmd_interp = np.delete(cur_cmd_interp,0)
-                cur_cmd_interp = np.round(np.diff(cur_cmd_interp),3)
+                if if_difference:
+                    if len(cur_cmd_interp) > len(cur_t_interp) + 1:
+                        cur_cmd_interp = np.delete(cur_cmd_interp,0)
+                    cur_cmd_interp = np.round(np.diff(cur_cmd_interp),3)
 
                 cur_real = cur_real_interp[-1]
 
@@ -150,9 +158,12 @@ def continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=Fal
                     np.array(cur_real_interp)).to(device)
                 cur_cmd_interp_tensor = torch.tensor(
                     np.array(cur_cmd_interp)).to(device)
+                cur_expect_interp_tensor = torch.tensor(
+                    np.array(cur_expect_interp)).to(device)
                 images = cur_real_interp_tensor.view(-1, 1, input_size)
                 images2 = cur_cmd_interp_tensor.view(-1, 1, input_size)
-                outputs = model(images, images2)
+                images3 = cur_expect_interp_tensor.view(-1, 1, input_size)
+                outputs = model(images, images2,images3)
                 pred_next_real = np.round(outputs.unsqueeze(
                     1).item(), 3)  # 将目标的形状从[2]变为[2, 1]
 
@@ -160,16 +171,11 @@ def continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=Fal
 
                 if next_real != 0:
                     count += 1
-                    p = abs(50 * (cur_real - pred_next_real) * (next_t - (cur_t+0.02)))
-                    if (cur_real < pred_next_real):
-                        p = pred_next_real + p
-                    else:
-                        p = pred_next_real - p
 
                     if abs(pred_next_real - next_real) < 0.01:
                         acc += 1
-                    # if abs(next_t - (cur_t+0.02)) > 0.04:
                     print(acc/count, index+49, next_real, pred_next_real)
+                    print(images, images2, images3)
                     predict_y.append(np.round(pred_next_real, 3))
                 else:
                     predict_y.append(0.0)
@@ -208,7 +214,7 @@ def continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=Fal
                 plt.ioff()  # 关闭画图窗口
 
 
-def speed_control(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=False):
+def speed_control(motor_t,motor_real,motor_cmd,motor_expect,model,if_plot=False,if_difference = False):
     moving_win = 0
     need_data_len = 50
     if len(motor_real) >= input_size:
@@ -227,33 +233,46 @@ def speed_control(motor_t,motor_real,motor_cmd,motro_expect,model,if_plot=False)
                 cur_t_not_interp = motor_t[moving_win + j:cur_index + 1]  # 当前帧
                 cur_cmd_not_intep = motor_cmd[moving_win + j: cur_index + 1]
                 cur_real_not_interp = motor_real[moving_win + j:cur_index + 1]
+                cur_expect_not_interp = motor_expect[moving_win + j:cur_index + 1]
 
                 cur_t = motor_t[cur_index]
                 cur_t_interp = np.arange(cur_t-0.98, cur_t + 0.02, 0.02) 
-                cur_cmd_t_interp = np.arange(cur_t-0.98, cur_t-0.01, 0.02)  # 当前帧(为了取到当前时间所以，所以调整了相加的时间)
+                cur_cmd_t_interp = np.arange(cur_t-0.98, cur_t+0.02, 0.02)  # 当前帧(为了取到当前时间所以，所以调整了相加的时间)
+                if if_difference:
+                    cur_cmd_t_interp = np.arange(cur_t-1.02, cur_t-0.01, 0.02)  # 当前帧(为了取到当前时间所以，所以调整了相加的时间)
 
                 cur_real_interp = np.round(
                     np.interp(cur_t_interp, cur_t_not_interp, cur_real_not_interp), 3)
                 
                 cur_cmd_interp = np.round(
                     np.interp(cur_cmd_t_interp, cur_t_not_interp, cur_cmd_not_intep), 3)
-                if len(cur_cmd_interp) >= 50:
-                    cur_cmd_interp = np.delete(cur_cmd_interp,0)
-                # cur_cmd_interp1 = np.round(np.diff(cur_cmd_interp),3)
+                
+                cur_expect_interp = np.round(
+                    np.interp(cur_t_interp, cur_t_not_interp, cur_expect_not_interp), 3)
 
-                cur_real = cur_real_interp[-1]
-                cur_cmd_interp = np.append(cur_cmd_interp,0.0)
+                if if_difference:
+                    if len(cur_cmd_interp) >= 50:
+                        cur_cmd_interp = np.delete(cur_cmd_interp,0)
+                    cur_cmd_interp = np.round(np.diff(cur_cmd_interp),3)
+                    cur_cmd_interp = np.append(cur_cmd_interp,0.0)
+
+                # cur_real = cur_real_interp[-1]
                 # cur_cmd_interp1 = np.append(cur_cmd_interp1,0.0)
                 i = -0.15
                 while i < 0.15:
                     cur_cmd_interp[-1] = i
                     imgs1 = torch.tensor(np.array(cur_real_interp)).to(device)
                     imgs2 = torch.tensor(np.array(cur_cmd_interp)).to(device)
+                    imgs3 = torch.tensor(np.array(cur_expect_interp)).to(device)
                     images = imgs1.view(-1, 1, input_size)
                     images2 = imgs2.view(-1, 1, input_size)
-                    outputs = model(images, images2)
+                    images3 = imgs3.view(-1, 1, input_size)
+                    outputs = model(images, images2,images3)
                     test_labels = outputs.unsqueeze(1)
-                    print(cur_cmd_interp[-1],np.round(test_labels.item(), 3))
+                    if if_difference:
+                        print(cur_real_not_interp[-1]+cur_cmd_interp[-1],np.round(test_labels.item(), 3))
+                    else:
+                        print(cur_cmd_interp[-1],np.round(test_labels.item(), 3))
                     i+=0.01
                 print("********************")
                 predict_x.append(index + 50 + j)
@@ -321,15 +340,15 @@ def visualizeDataset(motor_t,motor_real,motor_cmd,motro_expect):
         fig.canvas.manager.key_press_handler_id)  # 取消默认快捷键的注册
         fig.canvas.mpl_connect('key_press_event', on_delete_press)
         x = np.linspace(0, len(motor_real), len(motor_real))
-        ax.plot(x, motor_real, linewidth=3.0, color='r')  
-        # ax.plot(x, motro_expect, linewidth=3.0, color='b')  
+        # ax.plot(x, motor_real, linewidth=3.0, color='r')  
+        ax.plot(x, np.array(motor_cmd), linewidth=3.0)  
+        ax.plot(x, motro_expect, linewidth=3.0, color='b')  
         # ax.plot(x, np.array(motor_real) - np.array(motro_expect), linewidth=3.0, color='g')  
-        ax.plot(x, -np.array(motor_cmd) + np.array(motro_expect), linewidth=3.0)  
 
         for item in acc_list:
             plt.plot(item[0], 0, 'o')  # 'o' 表示用圆圈标记数据点
             plt.text(item[0], 0, f'{np.round(item[2],2)}', ha='right', va='bottom')
-        plt.legend(['real',"expect","Acc"])
+        plt.legend(['real',"expect","postion_gap"])
         plt.waitforbuttonpress()
         plt.pause(0.001)  
     ax.cla()  # 清除图形
@@ -473,7 +492,7 @@ if __name__ == "__main__":
             motor_t,motor_real,motor_cmd,motro_expect = loadDataSet(orin_path+file_name,False,False)
             visualizeDataset(motor_t,motor_real,motor_cmd,motro_expect)
             
-    motor_t,motor_real,motor_cmd,motro_expect = loadDataSet("/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/robokit_2024-08-22_16-49-57.0.log.txt",last_file=False)
+    motor_t,motor_real,motor_cmd,motro_expect = loadDataSet("/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/robokit_2024-09-02_18-00-11.3.log.txt",last_file=False)
     # fig, ax = plt.subplots()
     # aaa = []
     # moving_win = 30
@@ -504,10 +523,10 @@ if __name__ == "__main__":
     #         except Exception as expection:
     #             print(Exception)
     # print(np.mean(np.array(aaa)))
-    visualizeDataset(motor_t,motor_real,motor_cmd,motro_expect)
+    # visualizeDataset(motor_t,motor_real,motor_cmd,motro_expect)
     # calACC(motor_real,motor_cmd,motro_expect)
     # testSingleData(model)
 
-    # speed_control(motor_t,motor_real,motor_cmd,motro_expect,model,False)
+    # speed_control(motor_t,motor_real,motor_cmd,motro_expect,model,False,False)
     # calPeason(motor_t,motor_real,motor_cmd,motro_expect)
-	# continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,False)
+    continus_predict(motor_t,motor_real,motor_cmd,motro_expect,model,False,False)

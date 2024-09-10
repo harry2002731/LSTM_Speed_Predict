@@ -1,5 +1,5 @@
 import os
-from gen_data import *
+from genTrainData import *
 import platform
 
 
@@ -29,7 +29,7 @@ def fork_match_line(line):
     keyword = "ForkMotors"
     return keyword in line
     
-
+# 根据关键词进行字段匹配，提取出需要的数据
 def extractLog(dir, tar_dir, command):
     # 遍历目录下的所有文件和子目录
     for root, dirs, files in os.walk(dir):
@@ -51,10 +51,10 @@ def extractLog(dir, tar_dir, command):
                     for item in contents[0]:
                         item.replace("\n", "")
                         f.write(str(item))
-data_set_type_enum = ["orin","modifyied","fork"]
 
 if __name__ == "__main__":
-    data_type =  "fork"
+    data_set_type_enum = ["orin","modifyied","fork"]
+    data_type =  "modifyied"
     compare_data = False
     sys = platform.system()
     # 指定要遍历的文件夹路径
@@ -100,19 +100,19 @@ if __name__ == "__main__":
                     extractLog(orin_path,cmd_speed_p, cmd_match_line)
                     extractLog(orin_path,real_speed_p, real_match_line)
                     extractLog(orin_path,expect_speed_p, expect_match_line)
-                    real_speeds = decodeMotorSpeed(real_speed_p + file_name + ".txt", MotorReal)
-                    cmd_speeds = decodeMotorSpeed(cmd_speed_p + file_name + ".txt",MotorCmd)
-                    expect_speeds = decodeMotorSpeed(expect_speed_p + file_name + ".txt",MotorExpect)  
-                    matchData(real_speeds,cmd_speeds,expect_speeds, motor_compared_path + file_name + ".txt", True)
+                    real_speeds = decodeDataList(real_speed_p + file_name + ".txt", MotorReal)
+                    cmd_speeds = decodeDataList(cmd_speed_p + file_name + ".txt",MotorCmd)
+                    expect_speeds = decodeDataList(expect_speed_p + file_name + ".txt",MotorExpect)  
+                    matchOrinData(real_speeds,cmd_speeds,expect_speeds, motor_compared_path + file_name + ".txt", True)
 
                 elif data_type in data_set_type_enum and data_type ==  "modifyied":
-                    total_data = decodeMotorSpeed(total_speed_p + file_name + ".txt", MotorTotal)
+                    total_data = decodeDataList(total_speed_p + file_name + ".txt", MotorTotal)
                     writeFile(motor_compared_path + file_name + ".txt",total_data)
                     
                 elif data_type in data_set_type_enum and data_type ==  "fork":
-                    total_data = decodeMotorSpeed(total_speed_p + file_name + ".txt", MotorTotal)
-                    fork_data = decodeMotorSpeed(fork_position_p + file_name + ".txt", ForkPosition)
-                    matchData2(total_data,fork_data,fork_data, motor_compared_path + file_name + ".txt", True)
+                    total_data = decodeDataList(total_speed_p + file_name + ".txt", MotorTotal)
+                    fork_data = decodeDataList(fork_position_p + file_name + ".txt", ForkPosition)
+                    matchForkData(total_data,fork_data,fork_data, motor_compared_path + file_name + ".txt", True)
 
                 
     # 从compared的数据中生成训练数据到train文件夹中
@@ -121,7 +121,7 @@ if __name__ == "__main__":
             generateTrainData(
                 motor_train_path + file_name,
                 motor_compared_path + file_name,
-                1.3,
+                1.4,
                 interp_interval=0.02,
                 repetition_rate=0.8,
                 interp=True,
@@ -135,6 +135,6 @@ if __name__ == "__main__":
     
     
     
-    # formatFile(r"data\new_car2_train.txt")
+# formatFile(r"data\new_car2_train.txt")
 # 调整时间间隔
 # 修改网络输出 多时间 0.1 0.2 0.3 ，然后由滞后性判断使用哪个值

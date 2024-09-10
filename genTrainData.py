@@ -1,12 +1,11 @@
 import numpy as np
 
-
+# 时间戳
 class TimeInfo:
     def __init__(self) -> None:
         self.date = ""  # 日期
         self.time = ""  # 时间
         self.frame_num = ""  # 数据id
-
 
 # 泵控电机真实值
 class MotorReal:
@@ -130,7 +129,7 @@ class MotorExpect:
             if record:
                 str_ += i
 
-# 泵控电机真实值
+# 泵控电机位置
 class ForkPosition:
     def __init__(self) -> None:
         self.time_info = TimeInfo()
@@ -173,7 +172,6 @@ class ForkPosition:
                 str_ += i
     def getNeedStr(self):
         return str(self.time_info.time)+" "+str(self.cur_pos)+" "+str(self.tar_pos)+"\n"
-
 
 
 # 泵控电机期望指令
@@ -219,7 +217,7 @@ class MotorTotal:
 
 
 
-def decodeMotorSpeed(path, data_type):
+def decodeDataList(path, data_type):
     data = []
     with open(path, "r") as file:
         lines = file.readlines()
@@ -281,7 +279,7 @@ def formatFile(path):
 
 
 # 数据时间戳匹配
-def matchData(motor_reals, motor_cmds, motor_expects, path, debug=False):
+def matchOrinData(motor_reals, motor_cmds, motor_expects, path, debug=False):
     threshold = 0.1
     real_data = np.array([d.time_info.time for d in motor_reals])
     cmd_data = np.array([d.time_info.time for d in motor_cmds])
@@ -338,24 +336,22 @@ def matchData(motor_reals, motor_cmds, motor_expects, path, debug=False):
 
 
 # 数据时间戳匹配
-def matchData2(motor_expects , postion_cur, postion_tar, path, debug=False):
+def matchForkData(motor_expects , postion_cur, postion_tar, path, debug=False):
     threshold = 0.1
     expect_data = np.array([d.time_info.time for d in motor_expects])
     cur_data = np.array([d.time_info.time for d in postion_cur])
     tar_data = np.array([d.time_info.time for d in postion_tar])
 
     expect_data_speed = np.array([d.expect for d in motor_expects])
+    real_data_speed = np.array([d.real for d in motor_expects])
+    cmd_data_speed = np.array([d.cmd for d in motor_expects])
+    
     cur_data_speed = np.array([d.cur_pos for d in postion_cur])
     tar_data_speed = np.array([d.tar_pos for d in postion_tar])
 
     len1, len2, len3 = len(expect_data) , len(cur_data), len(tar_data)
     with open(path, "a+") as file:
         file.truncate(0)
-        # cmd_temp = []
-        # real_temp = []
-        # expect_temp = []
-        # matches = []
-
         idx1, idx2, idx3 = 0, 0, 0
 
         # 同时遍历三个数组
@@ -372,22 +368,14 @@ def matchData2(motor_expects , postion_cur, postion_tar, path, debug=False):
                 file.write(
                     str(timestamp1)
                     + " "
-                    + str(round(expect_data_speed[idx1], 3))
+                    + str(round(real_data_speed[idx1], 3))
                     + " "
-                    + str(round(cur_data_speed[left2], 3))
+                    + str(round(cmd_data_speed[idx1], 3))
                     + " "
-                    + str(round(tar_data_speed[left3], 3))
+                    + str(round(tar_data_speed[left3] - cur_data_speed[left2], 3))
                     + " "
                 )
                 file.write("\n")
-
-                # if debug:
-                #     matches.append((timestamp1, cmd_data[left2], expect_data[left3]))
-                #     real_temp.append([timestamp1, round(real_data_speed[idx1], 3)])
-                #     cmd_temp.append([cmd_data[left2], round(cmd_data_speed[left2], 3)])
-                #     expect_temp.append(
-                #         [expect_data[left3], round(expect_data_speed[left3], 3)]
-                #     )
             # 更新索引
             idx1 += 1
             idx2 = max(idx2, left2)
@@ -521,7 +509,6 @@ def generateTrainData(
                                 np.interp(new_timestamps, t_temp, real_temp), 3
                             )
                             if not difference:
-                                cmd_temp = np.array(expect_temp) - np.array(cmd_temp)
                                 cmd_temp = np.round(
                                     np.interp(new_timestamps, t_temp, cmd_temp), 3
                                 )
@@ -545,14 +532,12 @@ def generateTrainData(
                             cmd_temp = np.round(np.diff(cmd_temp),3)
                             # expect_temp = np.round(np.diff(expect_temp),3)
                         len_list.append(len(real_temp))
-                        real_temp = " ".join(
-                            str(element) for element in real_temp[0:-15]
-                        )
-                        cmd_temp = " ".join(str(element) for element in cmd_temp[0:-15])
+                        real_temp = " ".join(str(element) for element in real_temp[0:-20])
+                        cmd_temp = " ".join(str(element) for element in cmd_temp[0:-20])
                         expect_temp = " ".join(
-                            str(element) for element in expect_temp[0:-15]
+                            str(element) for element in expect_temp[0:-20]
                         )
-                        tmp_data = [label, real_temp, cmd_temp]
+                        tmp_data = [label, real_temp, cmd_temp, expect_temp]
                         write_file.write(file_name + " ")
                         for item_ in tmp_data:
                             write_file.write(str(item_) + " ")
@@ -572,7 +557,6 @@ def are_timestamps_evenly_distributed(timestamps):
     average_interval = sum(intervals) / len(intervals)
 
     # 检查每个间隔与平均间隔的差异是否在可接受的范围内
-    # 这里使用绝对值差的均值作为判断标准
     interval_deviation = sum(
         abs(interval - average_interval) for interval in intervals
     ) / len(intervals)
@@ -594,20 +578,3 @@ def mergeData(write_path, read_path):
         target_file.write(content)
 
         print("finsh")
-
-
-
-
-
-# if __name__ == "__main__":
-#     directory_path = r'data\new_dataset_car2_600kg\data_set'
-#     with open(r"data\orin_train.txt", "a") as file:
-#         file.truncate(0)
-#     for root, dirs, files in os.walk(directory_path):
-#         for file_name in files:
-#             print(file_name)
-#             motor_reals = decodeMotorReal(r"data\new_dataset_car2_600kg\real_speed\\"+file_name + ".txt")
-#             motor_cmds = decodeMotorCMD(r"data\new_dataset_car2_600kg\cmd_speed\\"+file_name + ".txt")
-#             motor_reals,motor_cmds = alignData(motor_reals,motor_cmds)
-#             matchData(motor_reals,motor_cmds,r"data\orin_train.txt")
-#     formatFile(r"data\orin_train.txt")
