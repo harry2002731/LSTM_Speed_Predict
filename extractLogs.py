@@ -55,7 +55,7 @@ def extractLog(dir, tar_dir, command):
 if __name__ == "__main__":
     data_set_type_enum = ["orin","modifyied","fork"]
     data_type =  "modifyied"
-    compare_data = False
+    compare_data = True
     sys = platform.system()
     # 指定要遍历的文件夹路径
     root_directory_path = r"data/roboshop_data/"
@@ -116,6 +116,8 @@ if __name__ == "__main__":
 
                 
     # 从compared的数据中生成训练数据到train文件夹中
+    data_list = ["real_temp","cmd_temp","expect_temp","height_temp"]
+    label_list = ["real_label","cmd_label","expect_label","height_label"]
     for root, dirs, files in os.walk(motor_compared_path):
         for file_name in files:                
             generateTrainData(
@@ -124,15 +126,16 @@ if __name__ == "__main__":
                 1.4,
                 interp_interval=0.02,
                 repetition_rate=0.8,
+                need_input_data = ["real_temp","cmd_temp"],
+                need_output_data = ["real_label"],
                 interp=True,
-                difference=False
+                difference=True
             )
             mergeData(
                 root_directory_path + "/train.txt",
                 motor_train_path + file_name,
             )
-        mergeData("./data/train.txt", root_directory_path + "/train.txt")
-    
+        mergeData("./data/train.txt", root_directory_path + "/train.txt")    
     
     
 # formatFile(r"data\new_car2_train.txt")

@@ -209,11 +209,12 @@ class MotorTotal:
                     self.real = float(tmp[3])
                     self.cmd = float(tmp[4])
                     self.expect = float(tmp[5])
+                    self.height_gap = float(tmp[6])
                 index += 1
             if record:
                 str_ += i
     def getNeedStr(self):
-        return str(self.time_info.time)+" "+str(self.real)+" "+str(self.cmd)+" "+str(self.expect)+"\n"
+        return str(self.time_info.time)+" "+str(self.real)+" "+str(self.cmd)+" "+str(self.expect)+" "+str(self.height_gap)+"\n"
 
 
 
@@ -454,12 +455,15 @@ def writeFile(path,data_list):
 #         print(len_list)
 
 
+
 def generateTrainData(
     write_path,
     read_path,
     time_gap,
     interp_interval=0.08,
     repetition_rate=0.9,
+    need_input_data = [],
+    need_output_data = [],
     interp=False,
     difference = False
 ):
@@ -478,7 +482,7 @@ def generateTrainData(
         len_list = []
         for i in range(start_index, len(data_list)):
             # label = data_list[i][1]
-            real_temp, cmd_temp, expect_temp, t_temp = [], [], [], []
+            real_temp, cmd_temp, expect_temp, height_temp, t_temp = [], [], [], [],[]
 
             for item in data_list[0 : i + 1]:
                 if 0.0 <= data_list[i][0] - item[0] <= time_gap:
@@ -486,6 +490,7 @@ def generateTrainData(
                     real_temp.append(item[1])
                     cmd_temp.append(item[2])
                     expect_temp.append(item[3])
+                    height_temp.append(item[4])
             # if (
             #     len(real_temp) > 0  and (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate and (len(expect_temp) - len(set(expect_temp))) / len(expect_temp) < repetition_rate
             # ):
@@ -494,10 +499,13 @@ def generateTrainData(
                 len(real_temp) > 0  and (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate 
             ):
                 if are_timestamps_evenly_distributed(t_temp):
-
                     start_time = np.array(t_temp).min()
                     end_time = np.array(t_temp).max()
                     if end_time - start_time > time_gap * 0.8 and len(real_temp) >= 5:
+                        end_time *= 1000
+                        time_gap *= 1000
+                        interp_interval *= 1000
+                        
                         # 数据时间间隔插值
                         if interp:
                             new_timestamps = np.arange(
@@ -506,45 +514,64 @@ def generateTrainData(
                                 interp_interval,
                             )  # 取不到end_time
                             real_temp = np.round(
-                                np.interp(new_timestamps, t_temp, real_temp), 3
+                                np.interp(new_timestamps/1000, t_temp, real_temp), 3
+                            )
+                            expect_temp = np.round(
+                                np.interp(new_timestamps/1000, t_temp, expect_temp), 3
+                            )
+                            height_temp = np.round(
+                                np.interp(new_timestamps/1000, t_temp, height_temp), 3
                             )
                             if not difference:
                                 cmd_temp = np.round(
-                                    np.interp(new_timestamps, t_temp, cmd_temp), 3
+                                    np.interp(new_timestamps/1000, t_temp, cmd_temp), 3
                                 )
                             else:
+
                                 new_cmd_timestamps = np.arange(
-                                    end_time - time_gap,
-                                    end_time + interp_interval,
+                                    end_time - time_gap - interp_interval,
+                                    end_time,
                                     interp_interval,
                                 ) 
-
-                                cmd_temp = np.round(
-                                    np.interp(new_cmd_timestamps, t_temp, cmd_temp), 3
-                                )
-                            expect_temp = np.round(
-                                np.interp(new_timestamps, t_temp, expect_temp), 3
-                            )
-                        label = real_temp[-1]
-                        # 前后差值计算
-                        if difference:
-                            # real_temp = np.round(np.diff(real_temp),3)
-                            cmd_temp = np.round(np.diff(cmd_temp),3)
-                            # expect_temp = np.round(np.diff(expect_temp),3)
+                                # print( np.round(np.interp(new_cmd_timestamps/1000, t_temp, cmd_temp), 3))
+                                cmd_temp = np.round(np.interp(new_cmd_timestamps/1000, t_temp, cmd_temp), 3)
+                                cmd_temp = np.round(np.diff(cmd_temp),3)
+                                # print(cmd_temp,cmd_temp.shape)
+                                # print(real_temp,real_temp.shape)
+                                # print("************************************")
+                        end_time /= 1000
+                        time_gap /= 1000
+                        interp_interval /= 1000
+                        
+                        real_label = real_temp[-1]
+                        cmd_label = cmd_temp[-1]
+                        expect_label = expect_temp[-1]
+                        height_label = height_temp[-1]
+                        
+                        end_index = int((time_gap - 1.0)/interp_interval)
+                            
                         len_list.append(len(real_temp))
-                        real_temp = " ".join(str(element) for element in real_temp[0:-20])
-                        cmd_temp = " ".join(str(element) for element in cmd_temp[0:-20])
-                        expect_temp = " ".join(
-                            str(element) for element in expect_temp[0:-20]
-                        )
-                        tmp_data = [label, real_temp, cmd_temp, expect_temp]
+                        real_temp = " ".join(str(element) for element in real_temp[0:-end_index])
+                        cmd_temp = " ".join(str(element) for element in cmd_temp[0:-end_index])
+                        expect_temp = " ".join(str(element) for element in expect_temp[0:-end_index])
+                        height_temp = " ".join(str(element) for element in height_temp[0:-end_index])
+                        data_dict = {"real_temp":real_temp,"cmd_temp":cmd_temp,"expect_temp":expect_temp,"height_temp":height_temp}
+                        label_dict = {"real_label":real_label,"cmd_label":cmd_label,"expect_label":expect_label,"height_label":height_label}
+                        tmp_data = []
+                        for label in need_output_data:
+                            tmp_data.append(label_dict[label])
+                            
+                        for data in need_input_data:
+                            tmp_data.append(data_dict[data])
+                            
+                        # tmp_data = [label, real_temp, cmd_temp]
                         write_file.write(file_name + " ")
                         for item_ in tmp_data:
                             write_file.write(str(item_) + " ")
                         write_file.write("\n")
+
         print(len_list)
-
-
+        
 def are_timestamps_evenly_distributed(timestamps):
     if len(timestamps) < 2:
         # 如果数组中少于两个时间戳，无法判断是否均匀分布
