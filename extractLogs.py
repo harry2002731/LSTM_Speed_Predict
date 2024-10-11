@@ -1,6 +1,7 @@
 import os
 from genTrainData import *
 import platform
+from fileProcessor import *
 
 
 # 实际速度关键词
@@ -53,9 +54,25 @@ def extractLog(dir, tar_dir, command):
                         f.write(str(item))
 
 if __name__ == "__main__":
+    # roboshop测试时自动从本地文件夹复制到目标路径
     data_set_type_enum = ["orin","modifyied","fork"]
     data_type =  "modifyied"
     compare_data = True
+    generate_train_data = True
+    copy_file = True
+    
+    if copy_file:
+        latest_file_name = ""
+        need_file_name = find_latest_file("data/roboshop_data/data_set/")
+
+        data_from_path = "/home/ubuntu/Desktop/"
+        # data_from_path = "/usr/local/etc/.SeerRobotics/rbk/diagnosis/log/"
+        need_file_name = find_latest_file(data_from_path)
+        
+        if need_file_name != latest_file_name:
+            mergeData("data/roboshop_data/data_set/"+need_file_name,data_from_path+need_file_name)
+    
+
     sys = platform.system()
     # 指定要遍历的文件夹路径
     root_directory_path = r"data/roboshop_data/"
@@ -114,28 +131,38 @@ if __name__ == "__main__":
                     fork_data = decodeDataList(fork_position_p + file_name + ".txt", ForkPosition)
                     matchForkData(total_data,fork_data,fork_data, motor_compared_path + file_name + ".txt", True)
 
-                
-    # 从compared的数据中生成训练数据到train文件夹中
-    data_list = ["real_temp","cmd_temp","expect_temp","height_temp"]
-    label_list = ["real_label","cmd_label","expect_label","height_label"]
-    for root, dirs, files in os.walk(motor_compared_path):
-        for file_name in files:                
-            generateTrainData(
-                motor_train_path + file_name,
-                motor_compared_path + file_name,
-                1.4,
-                interp_interval=0.02,
-                repetition_rate=0.8,
-                need_input_data = ["real_temp","cmd_temp"],
-                need_output_data = ["real_label"],
-                interp=True,
-                difference=True
-            )
-            mergeData(
-                root_directory_path + "/train.txt",
-                motor_train_path + file_name,
-            )
-        mergeData("./data/train.txt", root_directory_path + "/train.txt")    
+    if generate_train_data:
+        # 从compared的数据中生成训练数据到train文件夹中
+        data_list = ["real_temp","cmd_temp","expect_temp","height_gap_temp","speed_gap_temp"]
+        label_list = ["real_label","cmd_label","expect_label","height_label","speed_gap_label"]
+        for root, dirs, files in os.walk(motor_compared_path):
+            for file_name in files:                
+                generateTrainData(
+                    motor_train_path + file_name,
+                    motor_compared_path + file_name,
+                    1.4,
+                    interp_interval=0.02,
+                    repetition_rate=0.96,
+                    # need_input_data = ["real_temp","cmd_temp"],
+                    # need_output_data = ["real_label"],
+                    
+
+                    # need_input_data = ["cmd_temp","speed_gap_temp","height_gap_temp"],
+                    # need_output_data = ["cmd_label"],
+                    
+                    need_input_data = ["expect_temp","speed_gap_temp","height_gap_temp"],
+                    need_output_data = ["expect_label"],
+                    
+                    # need_input_data = ["expect_temp","height_gap_temp"],
+                    # need_output_data = ["expect_label"],
+                    interp=True,
+                    difference=False
+                )
+                mergeData(
+                    root_directory_path + "/train.txt",
+                    motor_train_path + file_name,
+                )
+            mergeData("./data/train.txt", root_directory_path + "/train.txt")    
     
     
 # formatFile(r"data\new_car2_train.txt")

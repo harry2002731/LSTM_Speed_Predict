@@ -53,12 +53,17 @@ class DoubleLstmInputLSTM(nn.Module):
 
 
 class MultiInputLSTM(nn.Module):
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size,input_num, output_num):
         super(MultiInputLSTM, self).__init__()
-        self.input_size = input_size
+        self.input_size = input_size #每个输入的数据的长度
+        
+        self.input_num = input_num # 输入数据的个数
+        self.output_num = output_num #输出数据的个数
+        
         self.conv_layer1 = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=64, kernel_size=(3, 1)),
+            nn.Conv2d(in_channels=1, out_channels=64, kernel_size=(input_num, 1)),
         )
+     
         self.bn1 = nn.BatchNorm2d(64)
         self.relu1 = nn.LeakyReLU(0.1, inplace=False)
 
@@ -83,16 +88,18 @@ class MultiInputLSTM(nn.Module):
         
         
         # self.max_pooling = nn.MaxPool2d((128, 3), stride=2)
-        self.concat_LSTM = nn.LSTM(32 * self.input_size, 128, 3, batch_first=True, dropout=0.2)
+        self.concat_LSTM = nn.LSTM(32 * self.input_size, 128, 3, batch_first=True, dropout=0.1)
 
         self.fc = nn.Linear(128, 64)
         self.fc2 = nn.Linear(64, output_size)
         self.fc3 = nn.Linear(32, output_size)
 
-    def forward(self, x1, x2, x3):
-        # a = x2[:,:,-1]-x2[:,:,-2]
-        # temp = torch.tensor([1 if i > 0 else -1  for i in a]).view(-1,1,1).to(torch.device("cuda:0"))
-        stack_data = torch.stack((x1, x2,x3), dim=1).permute(0, 2, 1, 3)
+    def forward(self, *inputs):
+        if len(inputs) == 2:
+            stack_data = torch.stack((inputs[0], inputs[1]), dim=1).permute(0, 2, 1, 3)
+        elif len(inputs) == 3:
+            stack_data = torch.stack((inputs[0], inputs[1],inputs[2]), dim=1).permute(0, 2, 1, 3)
+            
         stack_data = self.conv_layer1(stack_data)
         stack_data = self.bn1(stack_data)
         stack_data = self.relu1(stack_data)
@@ -118,6 +125,6 @@ class MultiInputLSTM(nn.Module):
         # stack_data = self.bn4(stack_data)
         # stack_data = self.relu4(stack_data).view(-1,32)
         # stack_data = self.fc3(stack_data)  # 全连接层
-
+        
         # out += temp
         return out
