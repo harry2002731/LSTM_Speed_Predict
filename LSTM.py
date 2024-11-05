@@ -13,14 +13,14 @@ import onnxruntime
 import MNN
 from DataProcess import *
 import subprocess
-batch_size = 8192
+batch_size = 4096
 
-input_size = 50
+input_size = 20
 hidden_size = 16
 hidden_size2 = 32
 num_layers = 3
 output_size = 2
-num_epochs = 1200
+num_epochs = 2000
 # 学习率
 learning_rate = 0.001
 # betas参数
@@ -32,126 +32,48 @@ weight_decay = 0
 # 是否使用AMSGrad
 amsgrad = True
 
-def genDataloader(data_path, device , input_size, random_state, if_random , if_torch):
-    train_, test_ = loadData(data_path, device , input_size, random_state, if_random , if_torch)
-    x1_train_data, x2_train_data,x3_train_data ,train_labels,train_labels2, train_file_name = train_
-    x1_test_data, x2_test_data, x3_test_data, test_labels, test_labels2,test_file_name = test_
-    dataset = Mydataset(x1_train_data, x2_train_data, x3_train_data,
-                        train_labels,train_labels2, train_file_name)
+
+
+def genDataloader(data_path, device , input_size, input_param, output_param, random_state, if_random , if_torch):
+    train_, test_ = loadData(data_path, device , input_size, random_state, input_param, output_param, if_random , if_torch)
+
+    dataset = Mydataset(input_param, output_param,train_)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-    test_dataset = Mydataset(x1_test_data, x2_test_data,x3_test_data ,
-                             test_labels,test_labels2, test_file_name)
+    test_dataset = Mydataset(input_param, output_param,test_)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
     return train_loader, test_loader
 
-def genDataloader2(data_path, device , input_size, random_state, if_random , if_torch):
-    train_, test_ = loadData2(data_path, device , input_size, random_state, if_random , if_torch)
-    x1_train_data, x2_train_data ,train_labels, train_file_name = train_
-    x1_test_data, x2_test_data, test_labels,test_file_name = test_
-    dataset = Mydataset2(x1_train_data, x2_train_data,
-                        train_labels, train_file_name)
-    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-
-    test_dataset = Mydataset2(x1_test_data, x2_test_data ,
-                             test_labels, test_file_name)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-    return train_loader, test_loader
-
-def genDataloader3(data_path, device , input_size, random_state, if_random , if_torch):
-    train_, test_ = loadData3(data_path, device , input_size, random_state, if_random , if_torch)
-    x1_train_data, x2_train_data,x3_train_data ,train_labels, train_file_name = train_
-    x1_test_data, x2_test_data, x3_test_data, test_labels,test_file_name = test_
-    dataset = Mydataset3(x1_train_data, x2_train_data,x3_train_data,
-                        train_labels, train_file_name)
-    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-
-    test_dataset = Mydataset3(x1_test_data, x2_test_data ,x3_test_data,
-                             test_labels, test_file_name)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-    return train_loader, test_loader
 
 class Mydataset(data.Dataset):
-    def __init__(self, x1, x2, x3,  y, y2, file_name):
-        self.x1 = x1
-        self.x2 = x2
-        self.x3 = x3
-        self.y = y
-        self.y2 = y2
-        self.file_name = file_name
+    def __init__(self, input_size, output_size, *x):
+
+        self.file_name = x[0][-1]
         self.idx = list()
         self.idy = list()
-        for i, item in enumerate(x1):
-            self.idx.append([self.x1[i], self.x2[i], self.x3[i]])
-        for i, item in enumerate(y):
-            self.idy.append([self.y[i], self.y2[i]])
-        pass
+        for i, item in enumerate(x[0][0]):
+            self.idx.append([x[0][index][i] for index in range(input_size)])
+            
+        for i, item in enumerate(x[0][0]):
+            self.idy.append([x[0][index+input_size][i] for index in range(output_size)])
+
 
     def __getitem__(self, index):
         input_data = self.idx[index]
-        target = self.idy[index]
-        file_name = self.file_name[index]
-        return input_data, target, file_name
-
-    def __len__(self):
-        return len(self.idx)
-
-class Mydataset2(data.Dataset):
-    def __init__(self, x1, x2, y, file_name):
-        self.x1 = x1
-        self.x2 = x2
-        self.y = y
-        self.file_name = file_name
-        self.idx = list()
-        self.idy = list()
-        for i, item in enumerate(x1):
-            self.idx.append([self.x1[i], self.x2[i]])
-        for i, item in enumerate(y):
-            self.idy.append(self.y[i])
-        pass
-
-    def __getitem__(self, index):
-        input_data = self.idx[index]
-        target = self.idy[index]
-        file_name = self.file_name[index]
-        return input_data, target, file_name
-
-    def __len__(self):
-        return len(self.idx)
-
-class Mydataset3(data.Dataset):
-    def __init__(self, x1, x2, x3,  y, file_name):
-        self.x1 = x1
-        self.x2 = x2
-        self.x3 = x3
-        self.y = y
-        self.file_name = file_name
-        self.idx = list()
-        self.idy = list()
-        for i, item in enumerate(x1):
-            self.idx.append([self.x1[i], self.x2[i], self.x3[i]])
-        for i, item in enumerate(y):
-            self.idy.append(self.y[i])
-        pass
-
-    def __getitem__(self, index):
-        input_data = self.idx[index]
-        target = self.idy[index]
+        target = self.idy[index][0]
         file_name = self.file_name[index]
         return input_data, target, file_name
 
     def __len__(self):
         return len(self.idx)
     
-
+    
+    
+    
 def train(device, input_num, output_num, debug = False,pretrained=False):
     start_time = time.time()
-    if input_num == 2:
-        train_loader, test_loader = genDataloader2(r"data/train.txt", device, input_size, 0.1, True, True)
-    elif input_num == 3 and output_num == 1:
-        train_loader, test_loader = genDataloader3(r"data/train.txt", device, input_size, 0.1, True, True)
-    elif input_num == 3 and output_num == 2:
-        train_loader, test_loader = genDataloader(r"data/train.txt", device, input_size, 0.1, True, True)
+
+    train_loader, test_loader = genDataloader(r"data/train.txt", device, input_size, input_num, output_num, 0.1, True, True)
         
     # 定义损失函数和优化器
     loss_function = nn.MSELoss()
@@ -159,7 +81,7 @@ def train(device, input_num, output_num, debug = False,pretrained=False):
     # 创建模型实例
     if pretrained:
         print("Load pretrained model \n")
-        model = torch.load(r"model/model.pth").to(device)
+        model = torch.load(r"model/model.pth").to(device, dtype=torch.float64)
     else:
         model = MultiInputLSTM(input_size, 1, input_num, output_num).to(device, dtype=torch.float64)
 
@@ -173,7 +95,7 @@ def train(device, input_num, output_num, debug = False,pretrained=False):
         amsgrad=amsgrad,
     )
     iter = 0
-    min_loss = 20
+    min_loss = 50
     print("TRAINING STARTED.\n")
     start_time = time.time()
     for epoch in range(num_epochs):
@@ -183,11 +105,15 @@ def train(device, input_num, output_num, debug = False,pretrained=False):
             optimizer.zero_grad()  # 清空之前的梯度信息
             train_model_inputs = [i.view(-1, 1,input_size).to(dtype=torch.float64) for i in train_datum]
             train_labels = train_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
+            # train_labels = train_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
             if input_num == 3 and output_num == 1:
                 outputs = model(train_model_inputs[0], train_model_inputs[1],train_model_inputs[2])
             elif input_num == 2 and output_num == 1:
                 outputs = model(train_model_inputs[0], train_model_inputs[1])
-
+            elif input_num == 4 and output_num == 1:
+                outputs = model(train_model_inputs[0], train_model_inputs[1],train_model_inputs[2],train_model_inputs[3])
+            elif input_num == 5 and output_num == 1:
+                outputs = model(train_model_inputs[0], train_model_inputs[1],train_model_inputs[2],train_model_inputs[3],train_model_inputs[4])            
             outputs *= 1000
             train_labels *= 1000
             loss = loss_function(outputs, train_labels)
@@ -196,52 +122,21 @@ def train(device, input_num, output_num, debug = False,pretrained=False):
             optimizer.step()
 
             iter += 1
-            if iter % 200 == 0:
-                model.eval()
-                loss_ = []
-                file_name_list = []
-                file_error_list = []
-                for i, (test_datum, test_labels, test_file_name) in enumerate(test_loader):
-                    test_model_inputs = [i.view(-1, 1,input_size).to(dtype=torch.float64) for i in test_datum]
-                    test_labels = test_labels.unsqueeze(1)
-                                       
-                    if input_num == 3 and output_num == 1:
-                        outputs = model(test_model_inputs[0], test_model_inputs[1],test_model_inputs[2])
-                    elif input_num == 2 and output_num == 1:
-                        outputs = model(test_model_inputs[0], test_model_inputs[1])
-                    outputs *= 1000
-                    test_labels *= 1000
-                    l = loss_function(
-                        outputs, test_labels).cpu().detach().numpy()
+            if iter % 100 == 0:
 
-                    # 监视有问题的数据来源的文件名称
-                    loss_.append(l)
-                    if l > 50 and debug:
-                        file_error_list.append([test_file_name[0], test_datum,outputs/1000,test_labels/1000, l])
-                        file_name_list.append(test_file_name[0])
-                        
-                avg_ = np.mean(np.array(loss_))
-                if debug:
-                    for name in set(file_name_list):
-                        print(name, file_name_list.count(name))
-                        
-                        # if (name == "robokit_2024-09-02_17-46-38.1.log.txt"):
-                        for error in file_error_list:
-                            if error[0] == name:
-                                # print(error[0],error[2].cpu().detach().numpy(),error[3].cpu().detach().numpy(),list(error[1][2].cpu().detach().numpy()),error[-1],"|",list(error[1][0].cpu().detach().numpy()),list(error[1][1].cpu().detach().numpy()))
-                                print(error[0],error[2].cpu().detach().numpy(),error[3].cpu().detach().numpy(),error[-1],"|",list(error[1][0].cpu().detach().numpy()),list(error[1][1].cpu().detach().numpy()))
-                                break
-
+                true_list, pred_list, loss_list, file_name_list, file_error_list = testAllData(model,test_loader,input_num,output_num,train_mode = True)
+                avg_ = np.mean(np.array(loss_list))
+                # avg_ = 0
                 if loss < min_loss:
                     min_loss = loss
                     model_saved = True
                     torch.save(model, r"model/model.pth")
-                print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f} model_saved:{model_saved}')
+                # print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f} model_saved:{model_saved}')
+                print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_} model_saved:{model_saved}')
 
     print(time.time()-start_time, f"num_epochs为{num_epochs}")
 
 def test(device, input_num=3,output_num=1):
-    loss_function = nn.MSELoss()
     model = torch.load(r"model/model.pth").to(device, dtype=torch.float64)
     model.eval()
 
@@ -249,19 +144,54 @@ def test(device, input_num=3,output_num=1):
     # for name in model.state_dict():
     #     print(name, model.state_dict()[name])
     
-    
-    if input_num == 2 and output_num == 1:
-        _, test_loader = genDataloader2(r"data/train.txt", device, input_size, 1.0, False, True)
-    elif input_num == 3 and output_num == 1:
-        _, test_loader = genDataloader3(r"data/train.txt", device, input_size, 1.0, False, True)
+    _, test_loader = genDataloader(r"data/test.txt", device, input_size, input_num, output_num, 1.0, False, True)
 
     iter = 0
 
     print("\nCALCULATING ACCURACY...\n")
+    true_list, pred_list, loss_list, file_name_list, file_error_list = testAllData(model,test_loader,input_num,output_num,train_mode = True)
+
+    n = len(true_list)
+    true_array, pred_array = np.array(true_list), np.array(pred_list)
+
+    x = [i for i in range(0, n)]
+    x_smooth = np.linspace(np.min(x), np.max(x), n)
+    plt.plot(
+        x_smooth, true_array[0:n], c="green", marker="*", ms=1, alpha=0.75, label="true"
+    )
+    plt.plot(
+        x_smooth, pred_array[0:n], c="red", marker="o", ms=1, alpha=0.75, label="pred"
+    )
+    plt.plot(
+        x_smooth,
+        loss_list[0:n],
+        c="blue",
+        marker="o",
+        ms=1,
+        alpha=0.75,
+        label="loss",
+    )
+    plt.grid(axis="y")
+    plt.legend()
+    plt.show()
+
+
+        
+# 测试loader中的所有数据
+def testAllData(model,test_loader,input_num,output_num,train_mode = False):
+    model.eval()
+    loss_function = nn.MSELoss()
+
+    # 打印权重信息
+    # for name in model.state_dict():
+    #     print(name, model.state_dict()[name])
+    iter = 0
+    file_name_list = []
+    file_error_list = []
+    print("\nCALCULATING ACCURACY...\n")
     with torch.no_grad():
-        pred, loss_list, y = [], [], []
+        pred_list, loss_list, true_list = [], [], []
         i = 0
-        # Iterate through test dataset
         for i, (test_datum, test_labels, test_file_name) in enumerate(test_loader):
 
             test_model_inputs = [i.view(-1, 1,input_size).to(dtype=torch.float64) for i in test_datum]
@@ -269,51 +199,69 @@ def test(device, input_num=3,output_num=1):
                 outputs = model(test_model_inputs[0], test_model_inputs[1],test_model_inputs[2])
             elif input_num == 2 and output_num == 1:
                 outputs = model(test_model_inputs[0], test_model_inputs[1])
-            outputs *= 1000
-            test_labels *= 1000
-            loss = loss_function(outputs, test_labels).cpu().detach().numpy()
+            elif input_num == 4 and output_num == 1:
+                outputs = model(test_model_inputs[0], test_model_inputs[1],test_model_inputs[2],test_model_inputs[3])
+            elif input_num == 5 and output_num == 1:
+                outputs = model(test_model_inputs[0], test_model_inputs[1],test_model_inputs[2],test_model_inputs[3],test_model_inputs[4])                
+            outputs *= 100
+            test_labels *= 100
+            loss = loss_function(outputs[0], test_labels).cpu().detach().numpy()
 
             test_labels = test_labels.unsqueeze(1)
+            # test_labels = test_labels.unsqueeze(1)
             test_labels = test_labels[0].to(dtype=torch.float64).cpu()  # 将目标的形状从[2]变为[2, 1]
             outputs = outputs.cpu()
 
-            y.append(test_labels)
-            pred.append(outputs[0][0])
+            true_list.append(test_labels)
+            pred_list.append(outputs[0])
             loss_list.append(float(loss))
             iter += 1
-            if iter % 100 == 0:
-                print(f"Iteration: {iter}\t Loss: {loss.item():.4f}")
-                print(f"*************************************************************************")
+            if train_mode:
+                # print(test_file_name[0], loss)
+                # print(test_datum, outputs/1000, test_labels/1000)
+                file_error_list.append([test_file_name[0], test_datum, outputs/1000, test_labels/1000, loss])
+                file_name_list.append(test_file_name[0])
+            # if iter % 100 == 0:
+                
+                
+                
+                # print(f"Iteration: {iter}\t Loss: {loss.item():.4f}")
+                # print(f"*************************************************************************")
                 # break
-        print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
+        # if train_mode:
+        #     losses = [item[-1] for item in file_error_list]
+        #     labels = [item[3] for item in file_error_list]
+        #     mean_loss = np.mean(losses)
+        #     std_loss = np.std(losses)
+        #     threshold_multiplier = 1  # 通常可以选择 2 或 3，倍数越大，对异常值的判断越严格
+        #     upper_threshold = mean_loss + threshold_multiplier * std_loss
+            # for item in file_error_list:
+            #     loss = item[-1]
+            #     label = item[3]
+            #     if loss > upper_threshold:
+            #         slope = find_max_slope(item[1][1][0])
+            #         print(f"Abnormal loss found in list: {item[-1]} "+ str(item[1][1][0][-1])+ " "+ str(slope)   )
+            #         for index,l in enumerate(labels):
+            #             if l == label:
+            #                 slope = find_max_slope(file_error_list[index][1][1][0])
+            #                 print(f"like abnormal data: {file_error_list[index][-1]} "+ str(file_error_list[index][1][1][0][-1]) + " "+str(slope)   )
+            #                 break
+            #         print(f"*************************************************************************")
 
-        n = i
-        y, pred = np.array(y), np.array(pred)
-        # pred = pred[:, 0]
-        # y = y[:, 0]
-        pred = pred[:]
-        y = y[:]
-        x = [i for i in range(0, n)]
-        x_smooth = np.linspace(np.min(x), np.max(x), n)
-        plt.plot(
-            x_smooth, y[0:n], c="green", marker="*", ms=1, alpha=0.75, label="true"
-        )
-        plt.plot(
-            x_smooth, pred[0:n], c="red", marker="o", ms=1, alpha=0.75, label="pred"
-        )
-        plt.plot(
-            x_smooth,
-            loss_list[0:n],
-            c="blue",
-            marker="o",
-            ms=1,
-            alpha=0.75,
-            label="loss",
-        )
-        plt.grid(axis="y")
-        plt.legend()
-        plt.show()
+                
+        # print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
+    return true_list, pred_list, loss_list, file_name_list, file_error_list
 
+def find_max_slope(data_list):
+    if len(data_list) < 2:
+        return 0
+    max_slope = 0
+    for i in range(len(data_list) - 1):
+        for j in range(i + 1, len(data_list)):
+            slope = (data_list[j] - data_list[i]) / (j - i)
+            if abs(slope) > abs(max_slope):
+                max_slope = slope
+    return max_slope
 
 def convert2ONNX(input_num,output_num,model_name):
     print("\CONVERTING TORCH TO ONNX...\n")
@@ -397,13 +345,16 @@ def ONNXRuntime():
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # print(torch.cuda.is_available())
-
-    # train(device,input_num=3,output_num=1, debug=True , pretrained=False)#3输入1输出
-    test(device,input_num=3,output_num=1)
-    # convert2ONNX(input_num=3,output_num=1,model_name="model.pth")
-    # subprocess.run(['bash', 'convert.sh','model'])
-    
+    # print(torch.cuda.is_available())1
+    mode = input("mode:")
+    if mode == "1":
+        train(device,input_num=3,output_num=1, debug=True , pretrained=False)#3输入1输
+        # test(device,input_num=3,output_num=1)
+        convert2ONNX(input_num=3,output_num=1,model_name="model.pth")
+        subprocess.run(['bash', 'convert.sh','model'])
+    elif mode == "2":
+        convert2ONNX(input_num=3,output_num=1,model_name="model.pth")
+        subprocess.run(['bash', 'convert.sh','model1'])
     
     # train(device,input_num=2,output_num=1, debug=True , pretrained=False)#2输入1输出
     # convert2ONNX(input_num=2,output_num=1,model_name="model.pth")

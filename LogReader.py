@@ -10,6 +10,9 @@ from scipy.signal import butter, lfilter
 from genTrainData import generateTrainData
 from BasicFun import *
 import shutil
+from tqdm import tqdm
+from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MaxNLocator
 
 # 创建实时绘制横纵轴变量
 x = []
@@ -90,7 +93,7 @@ def loadDataSet(file_path="", last_file=False):
 
 
 # 可视化数据集
-def visualizeDataset(dataset,title_name="", visual_indexs=[], compare_indexs=[], name_list=[]):
+def visualizeDataset(dataset , title_name="", visual_indexs=[], compare_indexs=[], name_list=[], nrow = 0):
     global delete, close
     fig, ax = plt.subplots(figsize=(10, 8))
     calCorrelation(dataset[compare_indexs[0]], dataset[compare_indexs[1]])
@@ -132,16 +135,81 @@ def visualizeDataset(dataset,title_name="", visual_indexs=[], compare_indexs=[],
     plt.close()  # 关闭画图窗口
     delete = False
     close = False
+
+# 可视化数据集
+def visualizeDataset2(title_name, fig, ax1,ax2,ax3):
+    global delete, close
+    while not delete and not close:
+        plt.title(title_name,y=0,loc='right')
+        fig.canvas.mpl_disconnect(
+            fig.canvas.manager.key_press_handler_id)  # 取消默认快捷键的注册
+        fig.canvas.mpl_connect('key_press_event', on_delete_press)
+        plt.waitforbuttonpress()
+        plt.pause(0.001)
+    ax1.cla()  # 清除图形
+    ax2.cla()  # 清除图形
+    ax3.cla()  # 清除图形
+    plt.close()  # 关闭画图窗口
+    delete = False
+    close = False
     
+
+# 可视化数据集
+def createAXPlot(dataset , visual_indexs=[],  name_list=[], ax = None):
+    colors = ["xkcd:blue",
+                "xkcd:grass green",
+                "xkcd:goldenrod",
+                "xkcd:forest green",
+                "xkcd:sky blue",
+                "xkcd:light red",
+                "xkcd:bright pink",
+                "xkcd:lavender",
+                "xkcd:ocean blue",
+                "xkcd:mud",
+                "xkcd:eggplant",
+                "xkcd:cyan",
+                "xkcd:slate blue",
+                "xkcd:peach",
+                "xkcd:coral",
+                "xkcd:blue",
+                "xkcd:grass green",
+                "xkcd:goldenrod",
+                "xkcd:forest green",
+                "xkcd:sky blue",
+                "xkcd:light red",
+                "xkcd:bright pink",
+                "xkcd:lavender",
+                "xkcd:ocean blue",
+                "xkcd:mud",
+                "xkcd:eggplant",
+                "xkcd:cyan",
+                "xkcd:slate blue",
+                "xkcd:peach"]
+    ax.grid(True, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=20))  # 设置横坐标最多10个刻度
+
+    x = np.linspace(0, len(dataset[visual_indexs[0]]), len(
+        dataset[visual_indexs[0]]))    
+    ax.set_title('Scatter Graph')
+    for index in visual_indexs:
+        ax.plot(x, dataset[index], linewidth=3.0,color=colors[index])
+    ax.legend(name_list)
+    return ax
+
     
     
 def inference(*data):
-    input_num = len(data)
-    input_data_list =  [torch.tensor(np.array(d)).to(device).view(-1, 1, input_size) for d in data]
+    input_num = len(data[0])
+
+    input_data_list =  [torch.tensor(np.array(d)).to(device).view(-1, 1, input_size) for d in data[0]]
     if input_num == 2:
         outputs = model(input_data_list[0], input_data_list[1])
     elif input_num == 3:
         outputs = model(input_data_list[0], input_data_list[1], input_data_list[2])
+    elif input_num == 4:
+        outputs = model(input_data_list[0], input_data_list[1], input_data_list[2], input_data_list[3])
+    elif input_num == 5:
+        outputs = model(input_data_list[0], input_data_list[1], input_data_list[2], input_data_list[3],input_data_list[4])    
     return float(np.round(convertTensor2Numpy(outputs), 3))
 
 # 速度空间下进行搜索
@@ -151,71 +219,209 @@ def searchSpeedSpace(data1, data2, data3, model):
     data2_last = data2[-1]
     for index,speed in enumerate(speed_find_list):
         data2[-1] = data2_last + speed
-        predict = inference(data1, data2, data3)
+        predict = inference([data1, data2, data3])
         output_list[index].append(predict)
     return output_list
 
+
+def continusExpectPredict(path,input_num,output_num):
+    data_list = generateTrainData(
+        path,
+        path,
+        1.4,
+        interp_interval=0.05,
+        repetition_rate=0.96,
+        need_input_data = ["expect_temp","height_gap_temp","real_temp"],
+        need_output_data = ["expect_label"],
+        interp=True, 
+        difference=False,
+        save_file=False
+    )
+    speed_ = [[],[]]
+    dataset = []
+
+    for data_ in data_list:
+        speed_list = inference([[float(i) for i in data_[j].split(" ")] for j in range(1,input_num+1)])
+        # speed_list = inference([float(i) for i in data_[1].split(" ")],[float(i) for i in data_[2].split(" ")],[float(i) for i in data_[3].split(" ")])
+        speed_[0].append(speed_list)
+        speed_[1].append(float(data_[0]))
+    dataset.append([i for i in speed_[0]])
+    dataset.append([i for i in speed_[1]])
+    return dataset
+
+        
+def continusSpeadSpaceSearch(path):
+    data_list = generateTrainData(
+        path,
+        path,
+        1.4,
+        interp_interval=0.05,
+        repetition_rate=0.96,
+        need_input_data=["real_temp", "cmd_temp", "height_gap_temp"],
+        need_output_data=["real_label"],
+        interp=True, 
+        difference=False,
+        save_file=False
+    )
+    dataset = []
+    speed_ = [[],[],[],[],[],[]]
+    for data_ in data_list:
+        speed_list = searchSpeedSpace([float(i) for i in data_[1].split(" ")],[float(i) for i in data_[2].split(" ")],[float(i) for i in data_[3].split(" ")],model)
+        speed_[0].append(speed_list[0])
+        speed_[1].append(speed_list[1])
+        speed_[2].append(speed_list[2])
+        speed_[3].append(speed_list[3])
+        speed_[4].append(speed_list[4])
+        speed_[5].append(float(data_[0]))
+        
+    dataset.append([i[0] for i in speed_[0]])
+    dataset.append([i[0] for i in speed_[1]])
+    dataset.append([i[0] for i in speed_[2]])
+    dataset.append([i[0] for i in speed_[3]])
+    dataset.append([i[0] for i in speed_[4]])
+    dataset.append([i for i in speed_[5]])
+    # visual_indexs = [0,1,2,3,4,5]
+    return dataset
+
+
+# 读取recursive_search
+def continusRecursiveSearch(file_path):
+    with open(file_path, "r") as f:
+        data = f.read()  # 读取第一行
+        # 分割数据
+        parts = data.split('[*********************************Default argument]')
+
+        expect_speed = []
+        speed_list = [[] for i in range(-20,20,2)]
+        # 存储recursive_search行的列表
+        recursive_search_lines = []
+        len_list = []
+        # 遍历每部分，提取recursive_search行
+        for part in parts:
+            if part:  # 确保部分不为空
+                lines = part.strip().split('\n')
+                for line in lines:
+                    if '[recursive_search]' in line:
+                        recursive_search_lines.append(line)
+                tmp_speed_list = [0 for i in range(-20,20,2)]
+                has_expect_append = False
+                for line in recursive_search_lines:
+                    line_list = line.split("|")
+                    speed_index = int((float(line_list[5]) + 0.02)/0.002)
+                    tmp_speed_list[speed_index] = line_list[10]
+                    if not has_expect_append:
+                        expect_speed.append(float(f"{float(line_list[9]):.3f}"))
+                        has_expect_append = True
+                for index,d in enumerate(tmp_speed_list):
+                    speed_list[index].append(float(f"{float(d):.3f}"))
+                # 打印提取的recursive_search行
+                len_list.append(len(recursive_search_lines))
+                recursive_search_lines = []
+        while len(speed_list[-1]) > len(expect_speed):
+            expect_speed.append(0)
+        while len(speed_list[-1]) < len(expect_speed):
+            expect_speed.pop(0)
+        speed_list.append(expect_speed)
+    return speed_list
+
+        
 if __name__ == "__main__":
     # 模型加载
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = torch.load(r"model/model.pth").to(device)
     model.eval()
 
+    fig, (ax1, ax2) = plt.subplots(ncols=1, nrows=2, figsize=(10, 8))
 
-    # # 查看所有数据
-    orin_path = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/train/"
-    for root, dirs, files in os.walk(orin_path):
-        global file_name
-        for file_name in files:
-            print(file_name)
+
+    # mode = int(input("mode:"))
+    mode = 3
+    # single_data = input("single data 0 or 1:")
+    single_data = 1
+    
+    if mode == 0:
+        if not single_data:
+            orin_path = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/test/"
+            for root, dirs, files in os.walk(orin_path):
+                global file_name
+                for file_name in tqdm(files):
+                    print(file_name)
+                    p = orin_path+file_name
+                    dataset = loadDataSet(p, last_file = False)
+                    motor_info = ["motor_t", "motor_real", "motor_cmd", "motor_expect", "motor_height_gap", "motor_speed_gap","orin_cmd","predict_expect","real_gap","cmd_gap","expect_gap"]
+                    visual_indexs = [1,2,3,4,5,7]
+                    visualizeDataset(dataset, title_name = file_name, visual_indexs=visual_indexs, compare_indexs=[1,3], name_list=[motor_info[i] for i in visual_indexs])
+        else:
+            p = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/train/robokit_2024-10-23_17-27-40.0.log.txt"
+            dataset = loadDataSet(p, last_file = False)       
             motor_info = ["motor_t", "motor_real", "motor_cmd", "motor_expect", "motor_height_gap", "motor_speed_gap","orin_cmd","predict_expect","real_gap","cmd_gap","expect_gap"]
-            # dataset = loadDataSet(orin_path+file_name, True)
-            p = orin_path+file_name
-            # p = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/train/robokit_2024-10-23_17-27-40.0.log.txt"
-            # p = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/train/robokit_2024-09-27_15-48-20.2.log.txt"
-            # p = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/test/robokit_2024-10-17_16-16-06.1.log.txt"
-            # p = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/test/robokit_2024-10-17_16-36-02.0.log.txt"
-            # p = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/test/robokit_2024-10-17_16-45-33.0.log.txt"
-            dataset = loadDataSet(p, False)
             visual_indexs = [1,2,3,4,5,7]
             visualizeDataset(dataset, title_name = file_name, visual_indexs=visual_indexs, compare_indexs=[1,3], name_list=[motor_info[i] for i in visual_indexs])
-            # print("****************************************************")
-            
-            
-            # motor_info = ["-0.02", "-0.01", "0.0", "0.01", "0.02", "motor_speed_gap","orin_cmd","predict_expect","real_gap","cmd_gap","expect_gap"]
+    # 查看在速度空间下的推理结果
+    elif mode == 1:
+        motor_info = ["-0.02", "-0.01", "0.0", "0.01", "0.02"]
+        p = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/train/robokit_2024-10-23_17-27-40.0.log.txt"
+        visual_indexs = [0,2,4,5]
+        dataset = continusSpeadSpaceSearch(p)
+        visualizeDataset(dataset, title_name = file_name, visual_indexs=visual_indexs, compare_indexs=[0,1], name_list=[motor_info[i] for i in visual_indexs])
 
-            # data_list = generateTrainData(
-            #     p,
-            #     p,
-            #     1.4,
-            #     interp_interval=0.05,
-            #     repetition_rate=0.96,
-            #     need_input_data=["real_temp",
-            #                     "cmd_temp", "height_gap_temp"],
-            #     need_output_data=["real_label"],
-            #     interp=True,
-            #     difference=False,
-            #     save_file=False
-            # )
-            # dataset = []
-            # speed_ = [[],[],[],[],[],[]]
-            # for data_ in data_list:
-            #     speed_list = searchSpeedSpace([float(i) for i in data_[1].split(" ")],[float(i) for i in data_[2].split(" ")],[float(i) for i in data_[3].split(" ")],model)
-            #     speed_[0].append(speed_list[0])
-            #     speed_[1].append(speed_list[1])
-            #     speed_[2].append(speed_list[2])
-            #     speed_[3].append(speed_list[3])
-            #     speed_[4].append(speed_list[4])
-            #     speed_[5].append(float(data_[0]))
+
+    elif mode == 2:
+        file_path = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/data_set/train/robokit_2024-09-27_15-48-20.2.log"
+        file_path.split()
+        motor_info = [str(i/1000) for i in range(-20,20,2)]
+        motor_info.append("expect")
+        visual_indexs=[0,4,8,12,16,-1]
+        
+        speed_list = continusRecursiveSearch(file_path)
+        visualizeDataset(speed_list,title_name="1",visual_indexs=visual_indexs,name_list = [motor_info[i] for i in visual_indexs])
+
+    elif mode == 3:
+        orin_path = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/data_set/train/"
+        for root, dirs, files in os.walk(orin_path):
+            for file_name in tqdm(files):
+                plt.grid(True, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+                fig, (ax1, ax2,ax3) = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
+                file_path = orin_path+file_name
+
+                # file_path = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/data_set/train/robokit_2024-10-28_17-34-22.0.log"
+
+                # p = "/home/ubuntu/Desktop/project/LSTM_Speed_Predict/data/roboshop_data/compared_data/train/robokit_2024-10-23_17-27-40.0.log.txt"
+
+                dataset = loadDataSet(file_path.replace("data_set","compared_data")+".txt", last_file = False)       
+                motor_info = ["motor_t", "motor_real", "motor_cmd", "motor_expect", "motor_height_gwwap", "motor_speed_gap","orin_cmd","predict_expect","real_gap","cmd_gap","expect_gap"]
+                visual_indexs = [1,2,3,7]
+                # visualizeDataset(dataset, title_name = file_name, visual_indexs=visual_indexs, compare_indexs=[1,3], name_list=[motor_info[i] for i in visual_indexs])
+                ax1 = createAXPlot(dataset,visual_indexs,[motor_info[i] for i in visual_indexs],ax1) # 绘制模型在速度空间下的搜索结果
+
+
+                try:
+                    name = file_path.split("/")[-1]
+                    motor_info = [str(i/1000) for i in range(-20,20,2)]
+                    # motor_info.append("expect")
+                    motor_info.append("expect")
+                    motor_info.append("real")
+                    visual_indexs=[0,8,16,-2,-1]
+                    # visual_indexs=[8,-1]
+                    temp = np.append(dataset[7],0)
+                    temp2 = np.append(dataset[1],0)
+                    
+                    recursiveSearchlist = continusRecursiveSearch(file_path) # 读取log中速度空间搜索下的结果
+                    recursiveSearchlist.append(temp)
+                    recursiveSearchlist.append(temp2)
+                    ax2 = createAXPlot(recursiveSearchlist,visual_indexs,[motor_info[i] for i in visual_indexs],ax2) # 绘制模型在速度空间下的搜索结果
+                    
+
+                    # motor_info = ["-0.02", "-0.01", "0.0", "0.01", "0.02","label"]
+                    # visual_indexs = [0,2,4,5]
+                    # SpeadSpaceSearchList = continusSpeadSpaceSearch(file_path.replace("data_set","compared_data")+".txt") # 使用模型在速度空间下进行搜索
+                    # ax3 = createAXPlot(SpeadSpaceSearchList,visual_indexs,[motor_info[i] for i in visual_indexs],ax3) # 绘制模型在速度空间下的搜索结果
+                    
                 
-            # dataset.append([i[0] for i in speed_[0]])
-            # dataset.append([i[0] for i in speed_[1]])
-            # dataset.append([i[0] for i in speed_[2]])
-            # dataset.append([i[0] for i in speed_[3]])
-            # dataset.append([i[0] for i in speed_[4]])
-            # dataset.append([i for i in speed_[5]])
-            # # visual_indexs = [0,1,2,3,4,5]
-            # visual_indexs = [0,2,4,5]
-            # visualizeDataset(dataset, title_name = file_name, visual_indexs=visual_indexs, compare_indexs=[0,1], name_list=[motor_info[i] for i in visual_indexs])
-            # print("****************************************************")
-
+                # motor_info = ["predict","expect"]
+                # visual_indexs = [0,1]
+                # SpeadSpaceSearchList = continusExpectPredict(file_path.replace("data_set","compared_data")+".txt",3,1) # 使用模型在速度空间下进行搜索
+                # ax3 = createAXPlot(SpeadSpaceSearchList,visual_indexs,motor_info,ax3) # 绘制模型在速度空间下的搜索结果
+                    visualizeDataset2(name , fig, ax1,ax2,ax3)
+                except Exception as e:
+                    pass

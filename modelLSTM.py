@@ -61,50 +61,45 @@ class MultiInputLSTM(nn.Module):
         self.output_num = output_num #输出数据的个数
         
         self.conv_layer1 = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=64, kernel_size=(input_num, 1)),
+            nn.Conv2d(in_channels=1, out_channels=128, kernel_size=(input_num, 1)),
         )
      
-        self.bn1 = nn.BatchNorm2d(64)
+        self.bn1 = nn.BatchNorm2d(128)
         self.relu1 = nn.LeakyReLU(0.1, inplace=False)
 
         self.conv_layer2 = nn.Sequential(
-            nn.Conv1d(in_channels=64, out_channels=32, kernel_size=1),
+            nn.Conv1d(in_channels=128, out_channels=64, kernel_size=1),
         )
-        self.bn2 = nn.BatchNorm1d(32)
+        self.bn2 = nn.BatchNorm1d(64)
         self.relu2 = nn.LeakyReLU(0.1, inplace=False)
 
         self.conv_layer3 = nn.Sequential(
-            nn.Conv1d(in_channels=32, out_channels=32, kernel_size=1),
+            nn.Conv1d(in_channels=64, out_channels=32, kernel_size=1),
         )
         self.bn3 = nn.BatchNorm1d(32)
         self.relu3 = nn.LeakyReLU(0.1, inplace=False)
 
-
-        self.conv_layer4 = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(2, 1)),
-        )
-        self.bn4 = nn.BatchNorm2d(32)
-        self.relu4 = nn.LeakyReLU(0.1, inplace=False)
-        
-        
         # self.max_pooling = nn.MaxPool2d((128, 3), stride=2)
-        self.concat_LSTM = nn.LSTM(32 * self.input_size, 128, 3, batch_first=True, dropout=0.1)
+        self.concat_LSTM = nn.LSTM(32 * self.input_size, 128, 3, batch_first=True, dropout=0.5,bidirectional=True)
 
-        self.fc = nn.Linear(128, 64)
+        self.fc = nn.Linear(128*2, 64)
         self.fc2 = nn.Linear(64, output_size)
-        self.fc3 = nn.Linear(32, output_size)
+        self.fc3 = nn.Linear(128, output_size)
 
     def forward(self, *inputs):
         if len(inputs) == 2:
             stack_data = torch.stack((inputs[0], inputs[1]), dim=1).permute(0, 2, 1, 3)
         elif len(inputs) == 3:
             stack_data = torch.stack((inputs[0], inputs[1],inputs[2]), dim=1).permute(0, 2, 1, 3)
-            
+        elif len(inputs) == 4:
+            stack_data = torch.stack((inputs[0], inputs[1],inputs[2],inputs[3]), dim=1).permute(0, 2, 1, 3)
+        elif len(inputs) == 5:
+            stack_data = torch.stack((inputs[0], inputs[1],inputs[2],inputs[3],inputs[4]), dim=1).permute(0, 2, 1, 3)
         stack_data = self.conv_layer1(stack_data)
         stack_data = self.bn1(stack_data)
         stack_data = self.relu1(stack_data)
 
-        stack_data = self.conv_layer2(stack_data.view(-1, 64, self.input_size))
+        stack_data = self.conv_layer2(stack_data.view(-1, 128, self.input_size))
         stack_data = self.bn2(stack_data)
         stack_data = self.relu2(stack_data)
 
@@ -115,6 +110,12 @@ class MultiInputLSTM(nn.Module):
         stack_data = stack_data.view(-1, 1, 32 * self.input_size)
         # stack_data = self.max_pooling(stack_data)
         out, _ = self.concat_LSTM(stack_data)
+        # for i in range(4):
+        #     output = self.fc3(out[-4 + i])
+        #     outputs.append(output)
+
+        # outputs = torch.stack(outputs, dim=0)
+
         out = self.fc(out[:, -1, :])  # 全连接层
         out = self.fc2(out)  # 全连接层
         

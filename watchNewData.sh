@@ -1,2 +1,2 @@
 python3 "./extractLogs.py"
-python3 "./LSTMPredict.py"
+python3 "./LogReader.py"

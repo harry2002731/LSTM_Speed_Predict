@@ -8,7 +8,9 @@ def randomSortData(data_path, random_seed, if_random):
         line = f.readline()  # 读取第一行
         while line:
             data_list = line.split(" ")
+            # data_list.index("\n")
             data_list.pop()
+            data_list = [item for item in data_list if item!= '|'] # 去除|
             data_l = [float(item) for item in data_list[1:]]
             data_l.insert(0, data_list[0])
             total_data_list.append(data_l)
@@ -258,3 +260,56 @@ def loadData3(data_path, device, input_size,  random_state, if_random , if_torch
 #     test_list = [total_real[len_data:-1], total_cmd[len_data:-1], total_postion[len_data:-1],total_label[len_data:-1],total_label2[len_data:-1],total_file_name[len_data:-1]]
 
 #     return train_list, test_list
+
+def split_list(data_list, n):
+    k, m = divmod(len(data_list), n)  # k是每份的长度，m是余数
+    return [data_list[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
+
+
+def loadData(data_path, device, input_size,  random_state, input_param, output_param ,if_random , if_torch):
+    """
+    加载和处理数据。
+
+    参数:
+    - data_path: 数据文件的路径。
+    - device: 数据处理所使用的设备（如CPU或GPU）。
+    - random_state: 用于划分训练集和测试集的随机状态参数。
+    - if_random: 是否对数据进行随机排序。
+
+    返回:
+    - train_list: 包含训练集real数据、cmd数据和标签的列表。
+    - test_list: 包含测试集real数据、cmd数据和标签的列表。
+    """
+    total_data_list = randomSortData(data_path, 64, if_random)
+    total_file_name = []
+    total_output_data = [[] for _ in range(input_param)]
+    total_label = [[] for _ in range(output_param)]
+
+    for data_list in total_data_list:
+
+        file_name = data_list.pop(0)
+        for i in range(output_param):
+            total_label[i].append(data_list.pop(0))
+        
+        splitted_lists = split_list(data_list, input_param)
+        for index ,data_list in enumerate(splitted_lists):
+            while len(data_list) > input_size:
+                data_list.pop(0)
+            if len(data_list) == input_size:
+                total_output_data[index].append(data_list)
+            total_file_name.append(file_name)
+    for i in range(output_param):
+        total_output_data.append(total_label[i])
+    len_data = int(len(total_label[0]) * (1 - random_state))
+
+    if not if_torch:
+        total_output_data_array = [np.array(data_list) for data_list in total_output_data]
+    else:
+        total_output_data_array = [torch.tensor(np.array(data_list)).to(device) for data_list in total_output_data]
+
+    # 分割数据集
+    train_list = [i[0:len_data] for i in total_output_data_array]
+    train_list.append(total_file_name[0:len_data])
+    test_list = [i[len_data:-1] for i in total_output_data_array]
+    test_list.append(total_file_name[len_data:-1])
+    return train_list, test_list

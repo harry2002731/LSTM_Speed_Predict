@@ -1,5 +1,6 @@
+import random
 import numpy as np
-
+from BasicFun import *
 # 时间戳
 class TimeInfo:
     def __init__(self) -> None:
@@ -403,15 +404,21 @@ def readFile(path):
             while "" in line:
                 line.remove("")
             data_list.append([float(item) for item in line])
-
     return data_list
 
 def writeFile(path,data_list):
+    delete_start_zero = True # 用于删除数据开始时候的0数据
     with open(path, "a") as file:
         file.truncate(0)
-        for line in data_list:
+        for index, line in enumerate(data_list):
+            # if delete_start_zero :
+            #     if data_list[index].real == 0 and data_list[index + 10].real != 0:
+            #         delete_start_zero = False
+            # elif not delete_start_zero:
             file.write(line.getNeedStr())
 
+
+    
 def generateTrainData(
     write_path,
     read_path,
@@ -420,12 +427,16 @@ def generateTrainData(
     repetition_rate=0.9,
     need_input_data = [],
     need_output_data = [],
-    interp=False,
-    difference = False
+    multiStepOutput = [False, 4],
+    interp=False, # 是否时间间隔插值，确保时间步的统一
+    difference = False, # 是否前后差值计算
+    save_file = True # 是否保存训练文件
 ):
+    aaa = []
     with open(write_path, "a") as write_file:
         file_name = write_path.split("/")[-1]
-        write_file.truncate(0)
+        if save_file:
+            write_file.truncate(0)
 
         data_list = readFile(read_path)
 
@@ -438,7 +449,7 @@ def generateTrainData(
         len_list = []
         for i in range(start_index, len(data_list)):
             file_name = write_path.split("/")[-1]
-            real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, t_temp = [], [], [], [],[],[]
+            real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, t_temp,predict_expect = [], [], [], [],[],[],[]
 
             for item in data_list[0 : i + 1]:
                 if 0.0 <= data_list[i][0] - item[0] <= time_gap:
@@ -446,19 +457,17 @@ def generateTrainData(
                     real_temp.append(item[1])
                     cmd_temp.append(item[2])
                     expect_temp.append(item[3])
-                    height_gap_temp.append(item[4]/1.4)
+                    height_gap_temp.append(item[4]/1.4) # 归一化
                     speed_gap_temp.append(item[5])
-            # if (
-            #     len(real_temp) > 0  and (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate and (len(expect_temp) - len(set(expect_temp))) / len(expect_temp) < repetition_rate
-            # ):
-            # 重复率
+                    predict_expect.append(item[-1])
+
             if (
                 # len(real_temp) > 0  and ((len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate or len(list(filter(lambda x: x == 0, real_temp)))/ len(real_temp) < repetition_rate)
-                len(real_temp) > 0  and ((len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate and (height_gap_temp[0] !=0 and height_gap_temp[-1] !=0 ))
+                # len(real_temp) > 0  and ((len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate )
+                True
             ):
-                if are_timestamps_evenly_distributed(t_temp):
-                    aaa = (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate
-                    bbb = len(list(filter(lambda x: x != 0, real_temp)))/ len(real_temp) < repetition_rate
+                if timeGapDistribution(t_temp) < 0.08:
+                # if True:
                     start_time = np.array(t_temp).min()
                     end_time = np.array(t_temp).max()
                     if end_time - start_time > time_gap * 0.8 and len(real_temp) >= 5:
@@ -473,6 +482,8 @@ def generateTrainData(
                                 end_time + interp_interval,
                                 interp_interval,
                             )  # 取不到end_time
+ 
+                                
                             real_temp = np.round(
                                 np.interp(new_timestamps/1000, t_temp, real_temp), 3
                             )
@@ -485,12 +496,14 @@ def generateTrainData(
                             speed_gap_temp = np.round(
                                 np.interp(new_timestamps/1000, t_temp, speed_gap_temp), 3
                             )
+                            predict_expect = np.round(
+                                np.interp(new_timestamps/1000, t_temp, predict_expect), 3
+                            )
                             if not difference:
                                 cmd_temp = np.round(
                                     np.interp(new_timestamps/1000, t_temp, cmd_temp), 3
                                 )
-                                cmd_label = cmd_temp[-1]
-
+                                cmd_label = formatFloat(cmd_temp[-1])
                             else:
 
                                 new_cmd_timestamps = np.arange(
@@ -498,9 +511,8 @@ def generateTrainData(
                                     end_time,
                                     interp_interval,
                                 ) 
-                                # print( np.round(np.interp(new_cmd_timestamps/1000, t_temp, cmd_temp), 3))
                                 cmd_temp = np.round(np.interp(new_cmd_timestamps/1000, t_temp, cmd_temp), 3)
-                                cmd_label = cmd_temp[-1]
+                                cmd_label = formatFloat(cmd_temp[-1])
 
                                 cmd_temp = np.round(np.diff(cmd_temp),3)
                                 # print(cmd_temp,cmd_temp.shape)
@@ -510,67 +522,60 @@ def generateTrainData(
                         time_gap /= 1000
                         interp_interval /= 1000
                         
-                        real_label = real_temp[-1]
-                        expect_label = expect_temp[-1]
-                        height_label = height_gap_temp[-1]
-                        speed_gap_label = speed_gap_temp[-1]
-                        
-                        end_index = int((time_gap - 1.0)/interp_interval)
+                        if not multiStepOutput[0]:
+                            real_label = formatFloat(real_temp[-1])
+                            expect_label = formatFloat(expect_temp[-1])
+                            height_gap_label = formatFloat(height_gap_temp[-1])
+                            speed_gap_label = formatFloat(speed_gap_temp[-1])
+                        else:
+                            multiStepOutput[1]
+                            real_label = [(formatFloat(element)) for element in real_temp[0:-end_index]]
+                            expect_label = [(formatFloat(element)) for element in expect_temp[0:-end_index]]
+                            height_gap_label = [(formatFloat(element)) for element in height_gap_temp[0:-end_index]]
+                            speed_gap_label = [(formatFloat(element)) for element in speed_gap_temp[0:-end_index]]
                             
+                        end_index = int((time_gap - 1.0)/interp_interval) + 1
+                        # end_index = int((time_gap - 1.0)/interp_interval)
+                        
+                        # 判断原始模型预测结果是否准确，若不准确则加入到训练数据中
+                        # if (abs(predict_expect[-end_index]) - abs(predict_expect[-1]) > 0.008):
+
                         len_list.append(len(real_temp))
-                        # temp_temp = expect_temp[0:-end_index]
-                        # if temp_temp[-5] == 0 and temp_temp[-1] == 0 and temp_temp[0] != 0:
-                        real_temp = " ".join(str(element) for element in real_temp[0:-end_index])
-                        cmd_temp = " ".join(str(element) for element in cmd_temp[0:-end_index])
-                        expect_temp = " ".join(str(element) for element in expect_temp[0:-end_index])
-                        height_gap_temp = " ".join(str(element) for element in height_gap_temp[0:-end_index])
-                        speed_gap_temp = " ".join(str(element) for element in speed_gap_temp[0:-end_index])
+                        real_temp = " ".join(str(formatFloat(element)) for element in real_temp[0:-end_index])
+                        # real_temp = " ".join(str(formatFloat(element)) for element in real_temp[end_index:])
+                        cmd_temp = " ".join(str(formatFloat(element))  for element in cmd_temp[0:-end_index])
+                        expect_temp = " ".join(str(formatFloat(element))  for element in expect_temp[0:-end_index])
+                        height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[0:-end_index])
+                        # height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[end_index:])
+                        speed_gap_temp = " ".join(str(formatFloat(element))  for element in speed_gap_temp[0:-end_index])
+                        # height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[end_index:])
+                        # speed_gap_temp = " ".join(str(formatFloat(element))  for element in speed_gap_temp[end_index:])
 
                         data_dict = {"real_temp":real_temp,"cmd_temp":cmd_temp,"expect_temp":expect_temp,"height_gap_temp":height_gap_temp,"speed_gap_temp":speed_gap_temp}
-                        label_dict = {"real_label":real_label,"cmd_label":cmd_label,"expect_label":expect_label,"height_label":height_label,"speed_gap_label":speed_gap_label}
+                        label_dict = {"real_label":real_label,"cmd_label":cmd_label,"expect_label":expect_label,"height_gap_label":height_gap_label,"speed_gap_label":speed_gap_label}
                         tmp_data = []
                         for label in need_output_data:
                             tmp_data.append(label_dict[label])
                             
                         for data in need_input_data:
                             tmp_data.append(data_dict[data])
-                            
-                        if (not (aaa)and bbb):
-                            file_name += ".txt"
-                        write_file.write(str(file_name) + " ")
-                        # write_file.write(str(end_time) + " ")
-                        for item_ in tmp_data:
-                            write_file.write(str(item_) + " ")
-                            # write_file.write(str(item_) + "\n")
-                        # write_file.write("***********************")
+                        aaa.append(tmp_data)
+                        if save_file:
+                            all_repetition = (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate # 重复率
+                            zero_repetition = len(list(filter(lambda x: x != 0, real_temp)))/ len(real_temp) < repetition_rate # 非0值率
+                            # if (not (all_repetition) and not(zero_repetition)):
+                            #     continue
+                                # file_name += ".txt"
+                            # write_file.write(str(file_name) + " " )
+                            write_file.write(f'{str(file_name)}|s|{new_timestamps[0]/1000:1.3f}|e|{new_timestamps[-(end_index+1)]/1000:1.3f}|l|{new_timestamps[-1]/1000:1.3f} ')
+                            for item_ in tmp_data:
+                                write_file.write(str(item_) + " | ")
 
-                        write_file.write("\n")
+                            write_file.write("\n")
 
-        print(len_list)
+        # print(len_list)
+        return aaa
         
-# 判断时间间隔是否分布均匀
-def are_timestamps_evenly_distributed(timestamps):
-    if len(timestamps) < 2:
-        # 如果数组中少于两个时间戳，无法判断是否均匀分布
-        return True
-
-    # 计算时间戳之间的间隔
-    intervals = [timestamps[i + 1] - timestamps[i] for i in range(len(timestamps) - 1)]
-
-    # 计算平均间隔
-    average_interval = sum(intervals) / len(intervals)
-
-    # 检查每个间隔与平均间隔的差异是否在可接受的范围内
-    interval_deviation = sum(
-        abs(interval - average_interval) for interval in intervals
-    ) / len(intervals)
-
-    # 定义一个阈值来决定是否认为时间戳是均匀分布的
-    # 这个阈值可以根据你的具体需求来调整
-    threshold = 0.08
-
-    # 如果间隔偏差小于阈值，则认为时间戳是均匀分布的
-    return interval_deviation < threshold
 
 
 def mergeData(write_path, read_path):
@@ -582,3 +587,5 @@ def mergeData(write_path, read_path):
         target_file.write(content)
 
         print("finsh")
+
+
