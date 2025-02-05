@@ -177,7 +177,7 @@ class ForkPosition:
 
 # 泵控电机期望指令
 class MotorTotal:
-    def __init__(self) -> None:
+    def __init__(self,weight) -> None:
         self.a = ""
         self.b = ""
         self.real = ""
@@ -187,7 +187,8 @@ class MotorTotal:
         self.search_count = ""
         self.time_info = TimeInfo()
         self.data_len = 0
-
+        self.weight = weight
+    
     def decode(self, data_str):
         str_ = ""
         index = 0
@@ -222,18 +223,31 @@ class MotorTotal:
                 str_ += i
     def getNeedStr(self):
         if self.data_len > 8:
-            data_string = str(self.time_info.time)+" "+str(self.real)+" "+str(self.cmd)+" "+str(self.expect)+" "+str(self.height_gap)+" "+str(self.speed_gap)+" "+str(self.orin_cmd)+" "+str(self.predict_expect)+"\n"
+            data_string = " ".join([
+                str(self.time_info.time),
+                str(self.real),
+                str(self.cmd),
+                str(self.expect),
+                str(self.height_gap),
+                str(self.speed_gap),
+                str(self.orin_cmd),
+                str(self.predict_expect),
+                str(self.weight)
+            ]) + "\n"
         else:
             data_string = str(self.time_info.time)+" "+str(self.real)+" "+str(self.cmd)+" "+str(self.expect)+" "+str(self.height_gap)+" "+str(self.speed_gap)+"\n"
 
         return data_string
 
-def decodeDataList(path, data_type):
+def decodeDataList(path, data_type,weight = ""):
     data = []
     with open(path, "r") as file:
         lines = file.readlines()
         for line in lines:
-            m = data_type()
+            if weight != "":
+                m = data_type(weight)
+            else:
+                m = data_type()
             m.decode(line)
             data.append(m)
     return data
@@ -427,7 +441,7 @@ def generateTrainData(
     repetition_rate=0.9,
     need_input_data = [],
     need_output_data = [],
-    multiStepOutput = [False, 4],
+    multiStepOutput = [False, [-5,-3,-1] ],
     interp=False, # 是否时间间隔插值，确保时间步的统一
     difference = False, # 是否前后差值计算
     save_file = True # 是否保存训练文件
@@ -449,7 +463,7 @@ def generateTrainData(
         len_list = []
         for i in range(start_index, len(data_list)):
             file_name = write_path.split("/")[-1]
-            real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, t_temp,predict_expect = [], [], [], [],[],[],[]
+            t_temp, real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, predict_expect, weight_temp = [], [], [], [],[],[],[],[]
 
             for item in data_list[0 : i + 1]:
                 if 0.0 <= data_list[i][0] - item[0] <= time_gap:
@@ -459,12 +473,13 @@ def generateTrainData(
                     expect_temp.append(item[3])
                     height_gap_temp.append(item[4]/1.4) # 归一化
                     speed_gap_temp.append(item[5])
-                    predict_expect.append(item[-1])
+                    predict_expect.append(item[6])
+                    weight_temp.append(item[-1])
 
             if (
                 # len(real_temp) > 0  and ((len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate or len(list(filter(lambda x: x == 0, real_temp)))/ len(real_temp) < repetition_rate)
-                # len(real_temp) > 0  and ((len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate )
-                True
+                len(real_temp) > 0  and ((len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate )
+                # True
             ):
                 if timeGapDistribution(t_temp) < 0.08:
                 # if True:
@@ -527,35 +542,39 @@ def generateTrainData(
                             expect_label = formatFloat(expect_temp[-1])
                             height_gap_label = formatFloat(height_gap_temp[-1])
                             speed_gap_label = formatFloat(speed_gap_temp[-1])
+                            weght_label = weight_temp[-1]
                         else:
-                            multiStepOutput[1]
-                            real_label = [(formatFloat(element)) for element in real_temp[0:-end_index]]
-                            expect_label = [(formatFloat(element)) for element in expect_temp[0:-end_index]]
-                            height_gap_label = [(formatFloat(element)) for element in height_gap_temp[0:-end_index]]
-                            speed_gap_label = [(formatFloat(element)) for element in speed_gap_temp[0:-end_index]]
-                            
-                        end_index = int((time_gap - 1.0)/interp_interval) + 1
-                        # end_index = int((time_gap - 1.0)/interp_interval)
+                            real_label = [(formatFloat(element)) for element in real_temp[multiStepOutput[-1]]]
+                            expect_label = [(formatFloat(element)) for element in expect_temp[multiStepOutput[-1]]]
+                            height_gap_label = [(formatFloat(element)) for element in height_gap_temp[multiStepOutput[-1]]]
+                            speed_gap_label = [(formatFloat(element)) for element in speed_gap_temp[multiStepOutput[-1]]]
+                            cmd_label = [(formatFloat(element)) for element in cmd_temp[multiStepOutput[-1]]]
+                            weght_label = [weight_temp[-1] for element in cmd_temp[multiStepOutput[-1]]]
+
+                        # end_index = int((time_gap - 1.0)/interp_interval) + 1
+                        end_index = int((time_gap - 1.0)/interp_interval)
                         
                         # 判断原始模型预测结果是否准确，若不准确则加入到训练数据中
                         # if (abs(predict_expect[-end_index]) - abs(predict_expect[-1]) > 0.008):
 
                         len_list.append(len(real_temp))
                         real_temp = " ".join(str(formatFloat(element)) for element in real_temp[0:-end_index])
-                        # real_temp = " ".join(str(formatFloat(element)) for element in real_temp[end_index:])
                         cmd_temp = " ".join(str(formatFloat(element))  for element in cmd_temp[0:-end_index])
                         expect_temp = " ".join(str(formatFloat(element))  for element in expect_temp[0:-end_index])
                         height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[0:-end_index])
-                        # height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[end_index:])
                         speed_gap_temp = " ".join(str(formatFloat(element))  for element in speed_gap_temp[0:-end_index])
                         # height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[end_index:])
                         # speed_gap_temp = " ".join(str(formatFloat(element))  for element in speed_gap_temp[end_index:])
 
                         data_dict = {"real_temp":real_temp,"cmd_temp":cmd_temp,"expect_temp":expect_temp,"height_gap_temp":height_gap_temp,"speed_gap_temp":speed_gap_temp}
-                        label_dict = {"real_label":real_label,"cmd_label":cmd_label,"expect_label":expect_label,"height_gap_label":height_gap_label,"speed_gap_label":speed_gap_label}
+                        label_dict = {"real_label":real_label,"cmd_label":cmd_label,"expect_label":expect_label,"height_gap_label":height_gap_label,"speed_gap_label":speed_gap_label,"weight_label":weght_label}
                         tmp_data = []
                         for label in need_output_data:
-                            tmp_data.append(label_dict[label])
+                            if  multiStepOutput[0]:
+                                for _ in label_dict[label]:
+                                    tmp_data.append(_)
+                            else:
+                                tmp_data.append(label_dict[label])
                             
                         for data in need_input_data:
                             tmp_data.append(data_dict[data])
@@ -586,6 +605,6 @@ def mergeData(write_path, read_path):
     with open(write_path, "a", encoding="utf-8") as target_file:
         target_file.write(content)
 
-        print("finsh")
+        # print("finsh")
 
 

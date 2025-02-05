@@ -64,8 +64,21 @@ def extractLog(dir, tar_dir, command):
                     for item in contents[0]:
                         item.replace("\n", "")
                         f.write(str(item))
+def deleteDirFiles(folder_path):
+        # 遍历文件夹中的所有文件和文件夹
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        
+        try:
+            # 如果是文件，则删除
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            # 如果是文件夹，则递归删除
 
+        except Exception as e:
+            print(f'Failed to delete {file_path}. Reason: {e}')
 
+            
 if __name__ == "__main__":
     # roboshop测试时自动从本地文件夹复制到目标路径
     data_set_type_enum = ["orin", "modifyied", "fork"]
@@ -73,15 +86,18 @@ if __name__ == "__main__":
     compare_data = True
     generate_train_data = True
     copy_file = False
+    clear_file = True
 
-    compare_data = True
-    generate_train_data = False
-    copy_file = False
+    # compare_data = True
+    # generate_train_data = False
+    # copy_file = True
     mode = "train"
 
+
+        
     if copy_file:
         latest_file_name = ""
-        need_file_name = find_latest_file("data/roboshop_data/data_set/")
+        latest_file_name = find_latest_file("data/roboshop_data/data_set/")
 
         data_from_path = "/home/ubuntu/Desktop/"                      
         # data_from_path = "/usr/local/etc/.SeerRobotics/rbk/diagnosis/log/"
@@ -106,8 +122,8 @@ if __name__ == "__main__":
         motor_compared_path = root_directory_path + r"compared_data\\"
         motor_train_path = root_directory_path + r"train_data\\"
     elif sys == "Linux":
-        orin_train_path = root_directory_path + r"data_set/train"
-        orin_test_path = root_directory_path + r"data_set/test"
+        orin_train_path = root_directory_path + r"data_set/train/"
+        orin_test_path = root_directory_path + r"data_set/test/"
 
         real_speed_p = root_directory_path + r"extracted_data/real_speed/"
         cmd_speed_p = root_directory_path + r"extracted_data/cmd_speed/"
@@ -119,10 +135,12 @@ if __name__ == "__main__":
         motor_test_compared_path = root_directory_path + r"compared_data/test/"
         motor_train_path = root_directory_path + r"train_data/"
 
+        
     # 提取符合要求的字段
     # extractLog(orin_path,cmd_speed_p, cmd_match_line)
     # extractLog(orin_path,real_speed_p, real_match_line)
     # extractLog(orin_path,expect_speed_p, expect_match_line)
+    # extractLog(orin_path, fork_position_p, fork_match_line)
 
     if mode == "train":
         orin_path = orin_train_path
@@ -132,41 +150,48 @@ if __name__ == "__main__":
         orin_path = orin_test_path
         txt_name = "test"
         motor_compared_path = motor_test_compared_path
+    # 清空目录下所有文件
+    if clear_file:
+        deleteDirFiles(total_speed_p)
+        deleteDirFiles(fork_position_p)
+        deleteDirFiles(motor_compared_path)
+        deleteDirFiles(motor_train_path)
+    
+    weights_list = ["0.0T","0.6T","1.5T"]
+    for wight in weights_list:
+        orin_path = orin_train_path + wight
+        
+        extractLog(orin_path, total_speed_p, roboshop_match_line)
+        # 匹配数据并存放到compared中
+        if compare_data:
+            for root, dirs, files in os.walk(orin_path):
+                for file_name in files:
+                    if data_type in data_set_type_enum and data_type == "orin":
+                        extractLog(orin_path, cmd_speed_p, cmd_match_line)
+                        extractLog(orin_path, real_speed_p, real_match_line)
+                        extractLog(orin_path, expect_speed_p, expect_match_line)
+                        real_speeds = decodeDataList(
+                            real_speed_p + file_name + ".txt", MotorReal)
+                        cmd_speeds = decodeDataList(
+                            cmd_speed_p + file_name + ".txt", MotorCmd)
+                        expect_speeds = decodeDataList(
+                            expect_speed_p + file_name + ".txt", MotorExpect)
+                        matchOrinData(real_speeds, cmd_speeds, expect_speeds,
+                                    motor_compared_path + file_name + ".txt", True)
 
-    extractLog(orin_path, total_speed_p, roboshop_match_line)
-    extractLog(orin_path, fork_position_p, fork_match_line)
+                    elif data_type in data_set_type_enum and data_type == "modifyied":
+                        total_data = decodeDataList(
+                            total_speed_p + file_name + ".txt", MotorTotal,wight.split("T")[0])
+                        writeFile(motor_compared_path +
+                                file_name + ".txt", total_data)
 
-    # 匹配数据并存放到compared中
-    if compare_data:
-        for root, dirs, files in os.walk(orin_path):
-            for file_name in files:
-                # file_name = "robokit_2024-10-23_14-51-30.0.log"
-                if data_type in data_set_type_enum and data_type == "orin":
-                    extractLog(orin_path, cmd_speed_p, cmd_match_line)
-                    extractLog(orin_path, real_speed_p, real_match_line)
-                    extractLog(orin_path, expect_speed_p, expect_match_line)
-                    real_speeds = decodeDataList(
-                        real_speed_p + file_name + ".txt", MotorReal)
-                    cmd_speeds = decodeDataList(
-                        cmd_speed_p + file_name + ".txt", MotorCmd)
-                    expect_speeds = decodeDataList(
-                        expect_speed_p + file_name + ".txt", MotorExpect)
-                    matchOrinData(real_speeds, cmd_speeds, expect_speeds,
-                                  motor_compared_path + file_name + ".txt", True)
-
-                elif data_type in data_set_type_enum and data_type == "modifyied":
-                    total_data = decodeDataList(
-                        total_speed_p + file_name + ".txt", MotorTotal)
-                    writeFile(motor_compared_path +
-                              file_name + ".txt", total_data)
-
-                elif data_type in data_set_type_enum and data_type == "fork":
-                    total_data = decodeDataList(
-                        total_speed_p + file_name + ".txt", MotorTotal)
-                    fork_data = decodeDataList(
-                        fork_position_p + file_name + ".txt", ForkPosition)
-                    matchForkData(total_data, fork_data, fork_data,
-                                  motor_compared_path + file_name + ".txt", True)
+                    elif data_type in data_set_type_enum and data_type == "fork":
+                        total_data = decodeDataList(
+                            total_speed_p + file_name + ".txt", MotorTotal)
+                        fork_data = decodeDataList(
+                            fork_position_p + file_name + ".txt", ForkPosition)
+                        matchForkData(total_data, fork_data, fork_data,
+                                    motor_compared_path + file_name + ".txt", True)
 
     if generate_train_data:
         with open(root_directory_path + "/"+txt_name+".txt", "a") as file:
@@ -175,21 +200,22 @@ if __name__ == "__main__":
             file.truncate(0)
         # 从compared的数据中生成训练数据到train文件夹中
         data_list = ["real_temp", "cmd_temp", "expect_temp",
-                     "height_gap_temp", "speed_gap_temp"]
+                    "height_gap_temp", "speed_gap_temp"]
         label_list = ["real_label", "cmd_label",
-                      "expect_label", "height_label", "speed_gap_label"]
+                    "expect_label", "height_label", "speed_gap_label","weight_label"]
         for root, dirs, files in os.walk(motor_compared_path):
             for file_name in files:
+                print(file_name)
                 start_time = time.time()
                 generateTrainData(
                     motor_train_path + file_name,
                     motor_compared_path + file_name,
-                    1.4,
+                    1.5,
                     interp_interval=0.05,
                     repetition_rate=0.96,
                     need_input_data=["real_temp",
-                                     "cmd_temp", "height_gap_temp"],
-                    need_output_data=["real_label"],
+                                    "cmd_temp", "height_gap_temp"],
+                    need_output_data=["real_label","weight_label"],
 
 
                     # need_input_data = ["cmd_temp","speed_gap_temp","height_gap_temp"],
@@ -201,8 +227,8 @@ if __name__ == "__main__":
                     # need_input_data = ["expect_temp","height_gap_temp"],
                     # need_output_data = ["expect_label"],
                     interp=True,
-                   difference=False,
-                   multiStepOutput = [False, 4],
+                    difference=False,
+                    multiStepOutput = [False, [-8,-6,-1] ],
                     save_file=True
                 )
                 mergeData(
@@ -211,7 +237,7 @@ if __name__ == "__main__":
                 )
                 print(file_name+" "+str(time.time() - start_time))
             mergeData("./data/"+txt_name+".txt",
-                      root_directory_path + "/"+txt_name+".txt")
+                    root_directory_path + "/"+txt_name+".txt")
 
 
 # formatFile(r"data\new_car2_train.txt")

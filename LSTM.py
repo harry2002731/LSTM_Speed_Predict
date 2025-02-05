@@ -47,7 +47,6 @@ def genDataloader(data_path, device , input_size, input_param, output_param, ran
 
 class Mydataset(data.Dataset):
     def __init__(self, input_size, output_size, *x):
-
         self.file_name = x[0][-1]
         self.idx = list()
         self.idy = list()
@@ -60,30 +59,29 @@ class Mydataset(data.Dataset):
 
     def __getitem__(self, index):
         input_data = self.idx[index]
-        target = self.idy[index][0]
+        target = self.idy[index]
+        # target = self.idy[index][0]
         file_name = self.file_name[index]
         return input_data, target, file_name
 
     def __len__(self):
         return len(self.idx)
     
-    
-    
-    
 def train(device, input_num, output_num, debug = False,pretrained=False):
     start_time = time.time()
 
-    train_loader, test_loader = genDataloader(r"data/train.txt", device, input_size, input_num, output_num, 0.1, True, True)
+    train_loader, test_loader = genDataloader(r"data/train.txt", device, input_size, input_num, output_num, 0.5, True, True)
         
     # 定义损失函数和优化器
     loss_function = nn.MSELoss()
+    criterion_cls = nn.CrossEntropyLoss()  # 分类损失函数
 
     # 创建模型实例
     if pretrained:
         print("Load pretrained model \n")
         model = torch.load(r"model/model.pth").to(device, dtype=torch.float64)
     else:
-        model = MultiInputLSTM(input_size, 1, input_num, output_num).to(device, dtype=torch.float64)
+        model = MultiInputLSTM(input_size, input_num, output_num).to(device, dtype=torch.float64)
 
     # 创建Adam优化器
     optimizer = optim.Adam(
@@ -104,35 +102,42 @@ def train(device, input_num, output_num, debug = False,pretrained=False):
             model.train()
             optimizer.zero_grad()  # 清空之前的梯度信息
             train_model_inputs = [i.view(-1, 1,input_size).to(dtype=torch.float64) for i in train_datum]
-            train_labels = train_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
+            
+            train_labels = torch.stack(train_labels).T
             # train_labels = train_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
-            if input_num == 3 and output_num == 1:
-                outputs = model(train_model_inputs[0], train_model_inputs[1],train_model_inputs[2])
-            elif input_num == 2 and output_num == 1:
+            # train_labels = train_labels.unsqueeze(1)  # 将目标的形状从[2]变为[2, 1]
+            if input_num == 2 :
                 outputs = model(train_model_inputs[0], train_model_inputs[1])
-            elif input_num == 4 and output_num == 1:
+            elif input_num == 3 :
+                outputs = model(train_model_inputs[0], train_model_inputs[1],train_model_inputs[2])
+            elif input_num == 4 :
                 outputs = model(train_model_inputs[0], train_model_inputs[1],train_model_inputs[2],train_model_inputs[3])
-            elif input_num == 5 and output_num == 1:
-                outputs = model(train_model_inputs[0], train_model_inputs[1],train_model_inputs[2],train_model_inputs[3],train_model_inputs[4])            
-            outputs *= 1000
-            train_labels *= 1000
-            loss = loss_function(outputs, train_labels)
+            elif input_num == 5 :
+                outputs = model(train_model_inputs[0], train_model_inputs[1],train_model_inputs[2],train_model_inputs[3],train_model_inputs[4])   
 
-            loss.backward()
+
+            loss_reg = loss_function(outputs[0]* 1000, train_labels[:,0]* 1000)
+            loss_cls = criterion_cls(outputs[1].view(-1,3), train_labels[:,1].type(torch.long))
+            total_loss = loss_cls + loss_reg  # 简单地将两个损失相加
+
+            # outputs *= 1000
+            # train_labels *= 1000
+
+            total_loss.backward()
             optimizer.step()
 
             iter += 1
             if iter % 100 == 0:
-
+                print(f"Loss: {total_loss.item():.4f}",loss_reg.item(),loss_cls.item())
                 true_list, pred_list, loss_list, file_name_list, file_error_list = testAllData(model,test_loader,input_num,output_num,train_mode = True)
                 avg_ = np.mean(np.array(loss_list))
-                # avg_ = 0
-                if loss < min_loss:
-                    min_loss = loss
-                    model_saved = True
-                    torch.save(model, r"model/model.pth")
-                # print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f} model_saved:{model_saved}')
-                print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_} model_saved:{model_saved}')
+                # # avg_ = 0
+                # if loss < min_loss:
+                #     min_loss = loss
+                #     model_saved = True
+                #     torch.save(model, r"model/model.pth")
+                # # print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f} model_saved:{model_saved}')
+                print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {total_loss.item():.4f} test_Loss: {avg_} model_saved:{model_saved}')
 
     print(time.time()-start_time, f"num_epochs为{num_epochs}")
 
@@ -181,11 +186,13 @@ def test(device, input_num=3,output_num=1):
 def testAllData(model,test_loader,input_num,output_num,train_mode = False):
     model.eval()
     loss_function = nn.MSELoss()
+    criterion_cls = nn.CrossEntropyLoss()  # 分类损失函数
 
     # 打印权重信息
     # for name in model.state_dict():
     #     print(name, model.state_dict()[name])
     iter = 0
+    correct = 0
     file_name_list = []
     file_error_list = []
     print("\nCALCULATING ACCURACY...\n")
@@ -193,38 +200,51 @@ def testAllData(model,test_loader,input_num,output_num,train_mode = False):
         pred_list, loss_list, true_list = [], [], []
         i = 0
         for i, (test_datum, test_labels, test_file_name) in enumerate(test_loader):
+            test_labels = torch.stack(test_labels).T
 
             test_model_inputs = [i.view(-1, 1,input_size).to(dtype=torch.float64) for i in test_datum]
-            if input_num == 3 and output_num == 1:
+            if input_num == 3 :
                 outputs = model(test_model_inputs[0], test_model_inputs[1],test_model_inputs[2])
-            elif input_num == 2 and output_num == 1:
+            elif input_num == 2 :
                 outputs = model(test_model_inputs[0], test_model_inputs[1])
-            elif input_num == 4 and output_num == 1:
+            elif input_num == 4 :
                 outputs = model(test_model_inputs[0], test_model_inputs[1],test_model_inputs[2],test_model_inputs[3])
-            elif input_num == 5 and output_num == 1:
-                outputs = model(test_model_inputs[0], test_model_inputs[1],test_model_inputs[2],test_model_inputs[3],test_model_inputs[4])                
-            outputs *= 100
-            test_labels *= 100
-            loss = loss_function(outputs[0], test_labels).cpu().detach().numpy()
-
-            test_labels = test_labels.unsqueeze(1)
+            elif input_num == 5 :
+                outputs = model(test_model_inputs[0], test_model_inputs[1],test_model_inputs[2],test_model_inputs[3],test_model_inputs[4])  
+            # outputs *= 100
+            # test_labels *= 100
+            # loss = loss_function(outputs[0], test_labels).cpu().detach().numpy()
             # test_labels = test_labels.unsqueeze(1)
-            test_labels = test_labels[0].to(dtype=torch.float64).cpu()  # 将目标的形状从[2]变为[2, 1]
-            outputs = outputs.cpu()
+            
+            
+            loss_reg = loss_function(outputs[0]* 1000, test_labels[:,0]* 1000)
+            loss_cls = criterion_cls(outputs[1].view(-1,3), test_labels[:,1].type(torch.long))
+            loss = loss_cls + loss_reg  # 简单地将两个损失相加
+            
+            _, predicted = torch.max(outputs[1].view(-1, 3), 1)
 
-            true_list.append(test_labels)
-            pred_list.append(outputs[0])
-            loss_list.append(float(loss))
+            # 获取真实标签
+            true_labels = test_labels[:, 1].type(torch.long)
+
+            # 比较预测类别和真实标签，统计正确的个数
+            if predicted == true_labels:
+                correct += 1
+
+            
+            # loss = loss_function(outputs, test_labels).cpu().detach().numpy()
+            # test_labels = test_labels[:,0].item()
+            # outputs = outputs[0].item()
+            
+            # true_list.append(test_labels)
+            # pred_list.append(outputs)
+            loss_list.append(float(loss.cpu().detach().numpy()))
             iter += 1
-            if train_mode:
-                # print(test_file_name[0], loss)
-                # print(test_datum, outputs/1000, test_labels/1000)
-                file_error_list.append([test_file_name[0], test_datum, outputs/1000, test_labels/1000, loss])
-                file_name_list.append(test_file_name[0])
+            # if train_mode:
+            #     # print(test_file_name[0], loss)
+            #     # print(test_datum, outputs/1000, test_labels/1000)
+            #     file_error_list.append([test_file_name[0], test_datum, outputs/1000, test_labels/1000, loss])
+            #     file_name_list.append(test_file_name[0])
             # if iter % 100 == 0:
-                
-                
-                
                 # print(f"Iteration: {iter}\t Loss: {loss.item():.4f}")
                 # print(f"*************************************************************************")
                 # break
@@ -249,8 +269,10 @@ def testAllData(model,test_loader,input_num,output_num,train_mode = False):
             #         print(f"*************************************************************************")
 
                 
-        # print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)}")
-    return true_list, pred_list, loss_list, file_name_list, file_error_list
+        print(f"平均值 {sum(loss_list)/len(loss_list)} 最大loss{max(loss_list)} acc {correct/len(loss_list)}")
+    
+    # return true_list, pred_list, loss_list, file_name_list, file_error_list
+    return [], [], loss_list,[] ,[] 
 
 def find_max_slope(data_list):
     if len(data_list) < 2:
@@ -311,6 +333,7 @@ def convert2ONNX(input_num,output_num,model_name):
     )
 
 
+
 def ONNXRuntime(): 
     train_loader, test_loader = genDataloader(r"data/train.txt", device, input_size, 1.0, False, True)
 
@@ -345,16 +368,18 @@ def ONNXRuntime():
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # print(torch.cuda.is_available())1
-    mode = input("mode:")
+    # print(torch.cuda.is_available())
+    # mode = input("mode:")
+    mode = "1"
     if mode == "1":
-        train(device,input_num=3,output_num=1, debug=True , pretrained=False)#3输入1输
+        # print("start "+time.time())
+        train(device,input_num=3,output_num=2, debug=True , pretrained=False)#3输入1输
         # test(device,input_num=3,output_num=1)
-        convert2ONNX(input_num=3,output_num=1,model_name="model.pth")
+        convert2ONNX(input_num=3,output_num=2,model_name="model.pth")
         subprocess.run(['bash', 'convert.sh','model'])
     elif mode == "2":
         convert2ONNX(input_num=3,output_num=1,model_name="model.pth")
-        subprocess.run(['bash', 'convert.sh','model1'])
+        subprocess.run(['bash', 'convert.sh','model'])
     
     # train(device,input_num=2,output_num=1, debug=True , pretrained=False)#2输入1输出
     # convert2ONNX(input_num=2,output_num=1,model_name="model.pth")
