@@ -105,14 +105,8 @@ class MultiInputLSTM(nn.Module):
         
 
     def forward(self, *inputs):
-        if len(inputs) == 2:
-            stack_data = torch.stack((inputs[0], inputs[1]), dim=1).permute(0, 2, 1, 3)
-        elif len(inputs) == 3:
-            stack_data = torch.stack((inputs[0], inputs[1],inputs[2]), dim=1).permute(0, 2, 1, 3)
-        elif len(inputs) == 4:
-            stack_data = torch.stack((inputs[0], inputs[1],inputs[2],inputs[3]), dim=1).permute(0, 2, 1, 3)
-        elif len(inputs) == 5:
-            stack_data = torch.stack((inputs[0], inputs[1],inputs[2],inputs[3],inputs[4]), dim=1).permute(0, 2, 1, 3)
+        stack_data = torch.stack((inputs[0]), dim=1).permute(0, 2, 1, 3)
+
         stack_data = self.conv_layer1(stack_data)
         stack_data = self.bn1(stack_data)
         stack_data = self.relu1(stack_data)
@@ -146,3 +140,4 @@ class MultiInputLSTM(nn.Module):
             out = torch.stack([pred1[:,-1], pred2[:,-1], pred3[:,-1]], dim=0)
             out = out.permute(1,0)
         return pred1[:,-1],pred2
+ 
