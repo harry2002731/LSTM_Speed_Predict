@@ -1,6 +1,6 @@
 import random
 import numpy as np
-from BasicFun import *
+from BasicFunc import *
 # 时间戳
 class TimeInfo:
     def __init__(self) -> None:
@@ -217,6 +217,8 @@ class MotorTotal:
                     if  self.data_len >8:
                         self.orin_cmd = float(tmp[7])
                         self.predict_expect = float(tmp[8])
+                        if self.data_len > 9:
+                            self.predict_weight_index = float(tmp[9])
                     self.speed_gap = float(self.expect - self.real)
                 index += 1
             if record:
@@ -232,7 +234,8 @@ class MotorTotal:
                 str(self.speed_gap),
                 str(self.orin_cmd),
                 str(self.predict_expect),
-                str(self.weight)
+                str(self.weight),
+                str(self.predict_weight_index)
             ]) + "\n"
         else:
             data_string = str(self.time_info.time)+" "+str(self.real)+" "+str(self.cmd)+" "+str(self.expect)+" "+str(self.height_gap)+" "+str(self.speed_gap)+"\n"

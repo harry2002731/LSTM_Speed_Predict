@@ -105,7 +105,10 @@ class MultiInputLSTM(nn.Module):
         
 
     def forward(self, *inputs):
-        stack_data = torch.stack((inputs[0]), dim=1).permute(0, 2, 1, 3)
+        if len(inputs)==1 :
+            stack_data = torch.stack((inputs[0]), dim=1).permute(0, 2, 1, 3)
+        else:
+            stack_data = torch.stack((inputs), dim=1).permute(0, 2, 1, 3)
 
         stack_data = self.conv_layer1(stack_data)
         stack_data = self.bn1(stack_data)
