@@ -177,7 +177,7 @@ class ForkPosition:
 
 # 泵控电机期望指令
 class MotorTotal:
-    def __init__(self,weight) -> None:
+    def __init__(self,weight,temp_real=None) -> None:
         self.a = ""
         self.b = ""
         self.real = ""
@@ -188,6 +188,7 @@ class MotorTotal:
         self.time_info = TimeInfo()
         self.data_len = 0
         self.weight = weight
+        self.temp_real = temp_real
     
     def decode(self, data_str):
         str_ = ""
@@ -210,6 +211,7 @@ class MotorTotal:
                     # self.speed = float(tmp[1])
                     # self.position = float(tmp[2])
                     self.real = float(tmp[3])
+                    # self.real = self.temp_real
                     self.cmd = float(tmp[4])
                     self.expect = float(tmp[5])
                     self.height_gap = float(tmp[6])
@@ -234,6 +236,18 @@ class MotorTotal:
                 str(self.speed_gap),
                 str(self.orin_cmd),
                 str(self.predict_expect),
+                str(self.weight)
+            ]) + "\n"
+        elif self.data_len > 9:
+            data_string = " ".join([
+                str(self.time_info.time),
+                str(self.real),
+                str(self.cmd),
+                str(self.expect),
+                str(self.height_gap),
+                str(self.speed_gap),
+                str(self.orin_cmd),
+                str(self.predict_expect),
                 str(self.weight),
                 str(self.predict_weight_index)
             ]) + "\n"
@@ -242,6 +256,26 @@ class MotorTotal:
 
         return data_string
 
+# def decodeDataList(path, data_type,weight = ""):
+#     data = []
+#     with open(path, "r") as file:
+#         lines = file.readlines()
+#         temp_real = -1
+#         for line in lines:
+#             if "MotorInfo2" in line:
+#                 temp_real = round(float(line.split("|")[2]),3)
+#                 continue
+#             if temp_real != -1:
+#                 if weight != "":
+#                     m = data_type(weight,temp_real)
+#                     temp_real = -1
+#                 else:
+#                     m = data_type()
+#             else:
+#                 continue
+#             m.decode(line)
+#             data.append(m)
+#     return data
 def decodeDataList(path, data_type,weight = ""):
     data = []
     with open(path, "r") as file:
@@ -251,10 +285,10 @@ def decodeDataList(path, data_type,weight = ""):
                 m = data_type(weight)
             else:
                 m = data_type()
+
             m.decode(line)
             data.append(m)
     return data
-
 
 class MotorDataProcess:
     def __init__(self, data) -> None:
@@ -434,14 +468,15 @@ def writeFile(path,data_list):
             # elif not delete_start_zero:
             file.write(line.getNeedStr())
 
-
+def calRepetitionRate(d):
+    return (len(d) - len(set(d))) / len(d)
     
 def generateTrainData(
     write_path,
     read_path,
     time_gap,
     interp_interval=0.08,
-    repetition_rate=0.9,
+    repetition_rate=0.95,
     need_input_data = [],
     need_output_data = [],
     multiStepOutput = [False, [-5,-3,-1] ],
@@ -469,8 +504,11 @@ def generateTrainData(
             t_temp, real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, predict_expect, weight_temp = [], [], [], [],[],[],[],[]
 
             for item in data_list[0 : i + 1]:
-                if 0.0 <= data_list[i][0] - item[0] <= time_gap:
-                    t_temp.append(item[0])
+                # if sixty_to_decimal(data_list[i][0]) - sixty_to_decimal(item[0]) > time_gap:
+                #     print(data_list[i][0],item[0], sixty_to_decimal(data_list[i][0]) - sixty_to_decimal(item[0]))
+                if 0.0 <= sixty_to_decimal(data_list[i][0]) - sixty_to_decimal(item[0]) <= time_gap:
+                    t_temp.append(sixty_to_decimal(item[0]))  # 
+                    # t_temp.append(item[0])  # 
                     real_temp.append(item[1])
                     cmd_temp.append(item[2])
                     expect_temp.append(item[3])
@@ -479,11 +517,7 @@ def generateTrainData(
                     predict_expect.append(item[6])
                     weight_temp.append(item[-1])
 
-            if (
-                # len(real_temp) > 0  and ((len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate or len(list(filter(lambda x: x == 0, real_temp)))/ len(real_temp) < repetition_rate)
-                len(real_temp) > 0  and ((len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate )
-                # True
-            ):
+            if (len(real_temp) > 0  and (calRepetitionRate(real_temp) < repetition_rate or calRepetitionRate(cmd_temp) < repetition_rate)):
                 if timeGapDistribution(t_temp) < 0.08:
                 # if True:
                     start_time = np.array(t_temp).min()
@@ -500,11 +534,8 @@ def generateTrainData(
                                 end_time + interp_interval,
                                 interp_interval,
                             )  # 取不到end_time
- 
-                                
-                            real_temp = np.round(
-                                np.interp(new_timestamps/1000, t_temp, real_temp), 3
-                            )
+
+                            
                             expect_temp = np.round(
                                 np.interp(new_timestamps/1000, t_temp, expect_temp), 3
                             )
@@ -589,16 +620,105 @@ def generateTrainData(
                             #     continue
                                 # file_name += ".txt"
                             # write_file.write(str(file_name) + " " )
-                            write_file.write(f'{str(file_name)}|s|{new_timestamps[0]/1000:1.3f}|e|{new_timestamps[-(end_index+1)]/1000:1.3f}|l|{new_timestamps[-1]/1000:1.3f} ')
+                            # write_file.write(f'{str(file_name)}|s|{new_timestamps[0]/1000:1.3f}|e|{new_timestamps[-(end_index+1)]/1000:1.3f}|l|{new_timestamps[-1]/1000:1.3f} ')
+                            write_file.write(f'{str(file_name)}|s|{decimal_to_sixty(new_timestamps[0]/1000):1.3f}|e|{decimal_to_sixty(new_timestamps[-(end_index+1)]/1000):1.3f}|l|{decimal_to_sixty(new_timestamps[-1]/1000):1.3f} ')
                             for item_ in tmp_data:
                                 write_file.write(str(item_) + " | ")
-
                             write_file.write("\n")
 
         # print(len_list)
         return aaa
-        
 
+
+def sixty_to_decimal(sixty_num):
+    decimal_tens = (sixty_num // 10) % 10
+    decimal_ones = sixty_num % 10
+    other = sixty_num // 100
+    return other *60 + decimal_tens *10 + decimal_ones
+
+def decimal_to_sixty(decimal_num):
+    return decimal_num//60*100 +decimal_num%60
+
+ 
+def generateDRLTestData(
+    write_path,
+    read_path,
+    interp_interval=0.08,
+    interp=False, # 是否时间间隔插值，确保时间步的统一
+    save_file = True # 是否保存文件
+):
+    aaa = []
+    with open(write_path, "a") as write_file:
+        file_name = write_path.split("/")[-1]
+        if save_file:
+            write_file.truncate(0)
+
+        data_list = readFile(read_path)
+
+        len_list = []
+        file_name = write_path.split("/")[-1]
+        t_temp, real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, predict_expect, weight_temp = [], [], [], [],[],[],[],[]
+        
+        record = False
+        for index, item in enumerate(data_list[0 : -2]):
+            if data_list[index+2][2] != 0.0 and not record:
+                record =True
+                continue
+            elif data_list[index+2][2] == 0.0 and record:
+                record =False
+                break
+            if record:
+                t_temp.append(sixty_to_decimal(item[0]))
+                real_temp.append(item[1])
+                cmd_temp.append(item[2])
+                expect_temp.append(item[3])
+                height_gap_temp.append(item[4]/1.4) # 归一化
+                speed_gap_temp.append(item[5])
+                predict_expect.append(item[6])
+                weight_temp.append(item[-1])
+
+        if (len(real_temp) > 0):
+            start_time = np.array(t_temp).min()
+            end_time = np.array(t_temp).max()
+            start_time *= 1000
+            end_time *= 1000
+            interp_interval *= 1000
+            
+            # 数据时间间隔插值
+            if interp:
+                new_timestamps = np.arange(
+                    start_time + interp_interval,
+                    end_time + interp_interval,
+                    interp_interval,
+                )  # 取不到end_time
+
+                    
+                real_temp = np.round(
+                    np.interp(new_timestamps/1000, t_temp, real_temp), 3
+                )
+
+                cmd_temp = np.round(
+                    np.interp(new_timestamps/1000, t_temp, cmd_temp), 3
+                )
+                height_temp = np.round(
+                    np.interp(new_timestamps/1000, t_temp, height_gap_temp), 3
+                )
+                end_time /= 1000
+                interp_interval /= 1000
+
+            print(new_timestamps.shape,real_temp.shape)
+            len_list.append(len(real_temp))
+            # real_temp = " ".join(str(formatFloat(element)) for element in real_temp)
+            # cmd_temp = " ".join(str(formatFloat(element))  for element in cmd_temp)
+            
+                
+            if save_file:
+                for index,t in enumerate(new_timestamps):
+                    write_file.write(f'{str(formatFloat(decimal_to_sixty(t/1000)))} | {str(real_temp[index])} | {str(cmd_temp[index])} | {str(height_gap_temp[2])}')
+                    write_file.write("\n")
+
+        # print(len_list)
+        return aaa
 
 def mergeData(write_path, read_path):
     # 读取源文件的全部内容

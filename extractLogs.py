@@ -42,7 +42,7 @@ def fork_match_line(line):
 # 根据关键词进行字段匹配，提取出需要的数据
 
 
-def extractLog(dir, tar_dir, command):
+def extractLog(dir, tar_dir, command ,command2 = None):
     # 遍历目录下的所有文件和子目录
     for root, dirs, files in os.walk(dir):
         for file in files:
@@ -53,8 +53,11 @@ def extractLog(dir, tar_dir, command):
                     # 打开并读取文件内容
                     with open(file_path, "r", encoding="utf-8") as f:
                         content = f.readlines()
-                        matching_lines = [
-                            line for line in content if command(line)]
+                        if command2 is not None:
+                            matching_lines = [line for line in content if command(line) or command2(line)]
+                        else:
+                            matching_lines = [line for line in content if command(line)]
+
                         contents.append(matching_lines)
                 except Exception as e:
                     print(f"Error reading file {file_path}: {e}")
@@ -83,18 +86,15 @@ if __name__ == "__main__":
     # roboshop测试时自动从本地文件夹复制到目标路径
     data_set_type_enum = ["orin", "modifyied", "fork"]
     data_type = "modifyied"
-    compare_data = True
+    compare_data = False
     generate_train_data = True
     copy_file = False
-    clear_file = True
+    clear_file = False
 
     # compare_data = True
     # generate_train_data = False
     # copy_file = True
-    mode = "train"
-
-
-        
+    mode = "drltest"
     if copy_file:
         latest_file_name = ""
         latest_file_name = find_latest_file("data/roboshop_data/data_set/")
@@ -133,6 +133,7 @@ if __name__ == "__main__":
 
         motor_train_compared_path = root_directory_path + r"compared_data/train/"
         motor_test_compared_path = root_directory_path + r"compared_data/test/"
+        motor_drltest_compared_path = root_directory_path + r"compared_data/drltest/"
         motor_train_path = root_directory_path + r"train_data/"
 
         
@@ -150,6 +151,13 @@ if __name__ == "__main__":
         orin_path = orin_test_path
         txt_name = "test"
         motor_compared_path = motor_test_compared_path
+    elif mode == "drltest":
+        orin_path = orin_train_path
+        
+        motor_compared_path = motor_drltest_compared_path
+        txt_name = "train"
+
+        
     # 清空目录下所有文件
     if clear_file:
         deleteDirFiles(total_speed_p)
@@ -161,6 +169,7 @@ if __name__ == "__main__":
     for wight in weights_list:
         orin_path = orin_train_path + wight
         
+        # extractLog(orin_path, total_speed_p, roboshop_match_line,real_match_line)
         extractLog(orin_path, total_speed_p, roboshop_match_line)
         # 匹配数据并存放到compared中
         if compare_data:
@@ -205,14 +214,15 @@ if __name__ == "__main__":
                     "expect_label", "height_label", "speed_gap_label","weight_label"]
         for root, dirs, files in os.walk(motor_compared_path):
             for file_name in files:
-                print(file_name)
                 start_time = time.time()
+                # generateDRLTestData(motor_train_path + file_name,motor_compared_path + file_name,interp_interval=0.05,interp=True,save_file=True)
+                
                 generateTrainData(
                     motor_train_path + file_name,
                     motor_compared_path + file_name,
-                    1.5,
+                    1.05,
                     interp_interval=0.05,
-                    repetition_rate=0.96,
+                    repetition_rate=0.88,
                     need_input_data=["real_temp",
                                     "cmd_temp", "height_gap_temp"],
                     need_output_data=["real_label","weight_label"],
@@ -235,7 +245,7 @@ if __name__ == "__main__":
                     root_directory_path + "/"+txt_name+".txt",
                     motor_train_path + file_name,
                 )
-                print(file_name+" "+str(time.time() - start_time))
+                print(file_name+" cost time:"+str(time.time() - start_time))
             mergeData("./data/"+txt_name+".txt",
                     root_directory_path + "/"+txt_name+".txt")
 
