@@ -8,7 +8,7 @@ def mergeData(write_path, read_path):
     with open(write_path, "a", encoding="utf-8") as target_file:
         target_file.write(content)
 
-        print("finsh")
+        # print("finsh")
 
 def find_latest_file(directory):
     latest_file = None

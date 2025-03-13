@@ -1,6 +1,8 @@
 import random
 import numpy as np
 from BasicFunc import *
+import time
+
 # 时间戳
 class TimeInfo:
     def __init__(self) -> None:
@@ -189,6 +191,13 @@ class MotorTotal:
         self.data_len = 0
         self.weight = weight
         self.temp_real = temp_real
+        self.a_prob = ""
+        self.b_prob = ""
+        self.c_prob = ""
+        self.d_prob = ""
+        self.e_prob = ""
+        self.f_prob = ""
+        self.g_prob = ""
     
     def decode(self, data_str):
         str_ = ""
@@ -207,6 +216,14 @@ class MotorTotal:
                     self.time_info.time = float(time_info[1])
                 elif index == 5:
                     tmp = str_.split("|")
+                    if len(tmp) == 8:
+                        self.a_prob = float(tmp[0])
+                        self.b_prob = float(tmp[1])
+                        self.c_prob = float(tmp[2])
+                        self.d_prob = float(tmp[3])
+                        self.e_prob = float(tmp[4])
+                        self.f_prob = float(tmp[5])
+                        self.g_prob = float(tmp[6])
                     # self.name = tmp[0]
                     # self.speed = float(tmp[1])
                     # self.position = float(tmp[2])
@@ -226,7 +243,7 @@ class MotorTotal:
             if record:
                 str_ += i
     def getNeedStr(self):
-        if self.data_len > 8:
+        if  9 >= self.data_len > 8:
             data_string = " ".join([
                 str(self.time_info.time),
                 str(self.real),
@@ -248,12 +265,21 @@ class MotorTotal:
                 str(self.speed_gap),
                 str(self.orin_cmd),
                 str(self.predict_expect),
+                # str(self.weight/10),
+                # str(self.predict_weight_index/10)
                 str(self.weight),
                 str(self.predict_weight_index)
             ]) + "\n"
         else:
-            data_string = str(self.time_info.time)+" "+str(self.real)+" "+str(self.cmd)+" "+str(self.expect)+" "+str(self.height_gap)+" "+str(self.speed_gap)+"\n"
-
+            data_string = " ".join([
+                        str(self.a_prob),
+                        str(self.b_prob),
+                        str(self.c_prob),
+                        str(self.d_prob),
+                        str(self.e_prob),
+                        str(self.f_prob),
+                        str(self.g_prob)
+                        ]) + "\n"
         return data_string
 
 # def decodeDataList(path, data_type,weight = ""):
@@ -276,6 +302,7 @@ class MotorTotal:
 #             m.decode(line)
 #             data.append(m)
 #     return data
+
 def decodeDataList(path, data_type,weight = ""):
     data = []
     with open(path, "r") as file:
@@ -467,6 +494,23 @@ def writeFile(path,data_list):
             #         delete_start_zero = False
             # elif not delete_start_zero:
             file.write(line.getNeedStr())
+def calculate_slope_intercept(arr):
+    n = len(arr)  # 数据点个数
+    x = list(range(n))  # 时间索引（0, 1, 2, ..., n-1）
+    y = arr  # 数据值
+    
+    # 计算均值
+    mean_x = sum(x) / n
+    mean_y = sum(y) / n
+    
+    # 计算协方差和方差
+    covariance = sum([(xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y)])
+    variance_x = sum([(xi - mean_x)**2 for xi in x])
+    
+    # 计算斜率和截距
+    slope = covariance / variance_x
+    
+    return slope
 
 def calRepetitionRate(d):
     return (len(d) - len(set(d))) / len(d)
@@ -484,150 +528,175 @@ def generateTrainData(
     difference = False, # 是否前后差值计算
     save_file = True # 是否保存训练文件
 ):
-    aaa = []
-    with open(write_path, "a") as write_file:
-        file_name = write_path.split("/")[-1]
-        if save_file:
-            write_file.truncate(0)
-
-        data_list = readFile(read_path)
-
-        first_t = data_list[0][0]
-        for index, data in enumerate(data_list):
-            if data[0] - first_t >= time_gap:
-                start_index = index + 1
-                break
-
-        len_list = []
-        for i in range(start_index, len(data_list)):
+    aaa = False
+    data_list = readFile(read_path)
+    if len(data_list) > 0:
+        aaa = True
+        with open(write_path, "a") as write_file:
             file_name = write_path.split("/")[-1]
-            t_temp, real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, predict_expect, weight_temp = [], [], [], [],[],[],[],[]
+            if save_file:
+                write_file.truncate(0)
+            first_t = data_list[0][0]
+            for index, data in enumerate(data_list):
+                if data[0] - first_t >= time_gap:
+                    start_index = index + 1
+                    break
 
-            for item in data_list[0 : i + 1]:
-                # if sixty_to_decimal(data_list[i][0]) - sixty_to_decimal(item[0]) > time_gap:
-                #     print(data_list[i][0],item[0], sixty_to_decimal(data_list[i][0]) - sixty_to_decimal(item[0]))
-                if 0.0 <= sixty_to_decimal(data_list[i][0]) - sixty_to_decimal(item[0]) <= time_gap:
-                    t_temp.append(sixty_to_decimal(item[0]))  # 
-                    # t_temp.append(item[0])  # 
-                    real_temp.append(item[1])
-                    cmd_temp.append(item[2])
-                    expect_temp.append(item[3])
-                    height_gap_temp.append(item[4]/1.4) # 归一化
-                    speed_gap_temp.append(item[5])
-                    predict_expect.append(item[6])
-                    weight_temp.append(item[-1])
+            len_list = []
+            st = time.time()
+            
+            for i in range(start_index, len(data_list)):
+                file_name = write_path.split("/")[-1]
+                t_temp, real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, predict_expect, weight_temp = [], [], [], [],[],[],[],[]
+                for item in data_list[0 : i + 1]:
+                    # if sixty_to_decimal(data_list[i][0]) - sixty_to_decimal(item[0]) > time_gap:
+                    #     print(data_list[i][0],item[0], sixty_to_decimal(data_list[i][0]) - sixty_to_decimal(item[0]))
+                    if 0.0 <= data_list[i][0] - item[0] <= time_gap:
+                        t_temp.append(item[0])  # 
+                        real_temp.append(item[1])
+                        cmd_temp.append(item[2])
+                        expect_temp.append(item[3])
+                        height_gap_temp.append(item[4]/1.4) # 归一化
+                        speed_gap_temp.append(item[5])
+                        predict_expect.append(item[6])
+                        weight_temp.append(item[8])
+                        # weight_temp.append("6")
 
-            if (len(real_temp) > 0  and (calRepetitionRate(real_temp) < repetition_rate or calRepetitionRate(cmd_temp) < repetition_rate)):
-                if timeGapDistribution(t_temp) < 0.08:
-                # if True:
-                    start_time = np.array(t_temp).min()
-                    end_time = np.array(t_temp).max()
-                    if end_time - start_time > time_gap * 0.8 and len(real_temp) >= 5:
-                        end_time *= 1000
-                        time_gap *= 1000
-                        interp_interval *= 1000
-                        
-                        # 数据时间间隔插值
-                        if interp:
-                            new_timestamps = np.arange(
-                                end_time - time_gap + interp_interval,
-                                end_time + interp_interval,
-                                interp_interval,
-                            )  # 取不到end_time
-
+                if (len(real_temp) > 0  and (calRepetitionRate(real_temp) < repetition_rate or calRepetitionRate(cmd_temp) < repetition_rate)):
+                    if timeGapDistribution(t_temp) < 0.08:
+                        start_time = np.array(t_temp).min()
+                        end_time = np.array(t_temp).max()
+                        if end_time - start_time > time_gap * 0.8 and len(real_temp) >= 5:
+                            end_time *= 1000
+                            time_gap *= 1000
+                            interp_interval *= 1000
                             
-                            expect_temp = np.round(
-                                np.interp(new_timestamps/1000, t_temp, expect_temp), 3
-                            )
-                            height_gap_temp = np.round(
-                                np.interp(new_timestamps/1000, t_temp, height_gap_temp), 3
-                            )
-                            speed_gap_temp = np.round(
-                                np.interp(new_timestamps/1000, t_temp, speed_gap_temp), 3
-                            )
-                            predict_expect = np.round(
-                                np.interp(new_timestamps/1000, t_temp, predict_expect), 3
-                            )
-                            if not difference:
-                                cmd_temp = np.round(
-                                    np.interp(new_timestamps/1000, t_temp, cmd_temp), 3
-                                )
-                                cmd_label = formatFloat(cmd_temp[-1])
-                            else:
-
-                                new_cmd_timestamps = np.arange(
-                                    end_time - time_gap - interp_interval,
-                                    end_time,
+                            # 数据时间间隔插值
+                            if interp:
+                                new_timestamps = np.arange(
+                                    end_time - time_gap + interp_interval,
+                                    end_time + interp_interval,
                                     interp_interval,
-                                ) 
-                                cmd_temp = np.round(np.interp(new_cmd_timestamps/1000, t_temp, cmd_temp), 3)
-                                cmd_label = formatFloat(cmd_temp[-1])
+                                )  # 取不到end_time
 
-                                cmd_temp = np.round(np.diff(cmd_temp),3)
-                                # print(cmd_temp,cmd_temp.shape)
-                                # print(real_temp,real_temp.shape)
-                                # print("************************************")
-                        end_time /= 1000
-                        time_gap /= 1000
-                        interp_interval /= 1000
-                        
-                        if not multiStepOutput[0]:
-                            real_label = formatFloat(real_temp[-1])
-                            expect_label = formatFloat(expect_temp[-1])
-                            height_gap_label = formatFloat(height_gap_temp[-1])
-                            speed_gap_label = formatFloat(speed_gap_temp[-1])
-                            weght_label = weight_temp[-1]
-                        else:
-                            real_label = [(formatFloat(element)) for element in real_temp[multiStepOutput[-1]]]
-                            expect_label = [(formatFloat(element)) for element in expect_temp[multiStepOutput[-1]]]
-                            height_gap_label = [(formatFloat(element)) for element in height_gap_temp[multiStepOutput[-1]]]
-                            speed_gap_label = [(formatFloat(element)) for element in speed_gap_temp[multiStepOutput[-1]]]
-                            cmd_label = [(formatFloat(element)) for element in cmd_temp[multiStepOutput[-1]]]
-                            weght_label = [weight_temp[-1] for element in cmd_temp[multiStepOutput[-1]]]
+                                real_temp = np.round(
+                                    np.interp(new_timestamps/1000, t_temp, real_temp), 3
+                                )
 
-                        # end_index = int((time_gap - 1.0)/interp_interval) + 1
-                        end_index = int((time_gap - 1.0)/interp_interval)
-                        
-                        # 判断原始模型预测结果是否准确，若不准确则加入到训练数据中
-                        # if (abs(predict_expect[-end_index]) - abs(predict_expect[-1]) > 0.008):
+                                expect_temp = np.round(
+                                    np.interp(new_timestamps/1000, t_temp, expect_temp), 3
+                                )
+                                indices = np.where(np.array(height_gap_temp) == 0.0)[0]
+                                index_ =None
 
-                        len_list.append(len(real_temp))
-                        real_temp = " ".join(str(formatFloat(element)) for element in real_temp[0:-end_index])
-                        cmd_temp = " ".join(str(formatFloat(element))  for element in cmd_temp[0:-end_index])
-                        expect_temp = " ".join(str(formatFloat(element))  for element in expect_temp[0:-end_index])
-                        height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[0:-end_index])
-                        speed_gap_temp = " ".join(str(formatFloat(element))  for element in speed_gap_temp[0:-end_index])
-                        # height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[end_index:])
-                        # speed_gap_temp = " ".join(str(formatFloat(element))  for element in speed_gap_temp[end_index:])
+                                if indices.size == 0:
+                                    pass
+                                    # print("元素不在数组中")
+                                else:
+                                    index_ = indices[-1]
+                                height_gap_temp = np.round(
+                                    np.interp(new_timestamps/1000, t_temp, height_gap_temp), 3
+                                )
+                                if index_ != None:
+                                    for i,t in enumerate(new_timestamps/1000):
+                                        if t >= t_temp[index_]:
+                                            for j in range(0,i+1):
+                                                height_gap_temp[j] = 0.0
+                                            break
+                                
+                                
+                                speed_gap_temp = np.round(
+                                    np.interp(new_timestamps/1000, t_temp, speed_gap_temp), 3
+                                )
+                                predict_expect = np.round(
+                                    np.interp(new_timestamps/1000, t_temp, predict_expect), 3
+                                )
+                                if not difference:
+                                    cmd_temp = np.round(
+                                        np.interp(new_timestamps/1000, t_temp, cmd_temp), 3
+                                    )
+                                    cmd_label = formatFloat(cmd_temp[-1])
+                                else:
 
-                        data_dict = {"real_temp":real_temp,"cmd_temp":cmd_temp,"expect_temp":expect_temp,"height_gap_temp":height_gap_temp,"speed_gap_temp":speed_gap_temp}
-                        label_dict = {"real_label":real_label,"cmd_label":cmd_label,"expect_label":expect_label,"height_gap_label":height_gap_label,"speed_gap_label":speed_gap_label,"weight_label":weght_label}
-                        tmp_data = []
-                        for label in need_output_data:
-                            if  multiStepOutput[0]:
-                                for _ in label_dict[label]:
-                                    tmp_data.append(_)
+                                    new_cmd_timestamps = np.arange(
+                                        end_time - time_gap - interp_interval,
+                                        end_time,
+                                        interp_interval,
+                                    ) 
+                                    cmd_temp = np.round(np.interp(new_cmd_timestamps/1000, t_temp, cmd_temp), 3)
+                                    cmd_label = formatFloat(cmd_temp[-1])
+
+                                    cmd_temp = np.round(np.diff(cmd_temp),3)
+                                    # print(cmd_temp,cmd_temp.shape)
+                                    # print(real_temp,real_temp.shape)
+                                    # print("************************************")
+                            end_time /= 1000
+                            time_gap /= 1000
+                            interp_interval /= 1000
+ 
+                            if not multiStepOutput[0]:
+                                real_label = formatFloat(real_temp[-1])
+                                expect_label = formatFloat(expect_temp[-1])
+                                height_gap_label = formatFloat(height_gap_temp[-1])
+                                speed_gap_label = formatFloat(speed_gap_temp[-1])
+                                weght_label = weight_temp[-1]
                             else:
-                                tmp_data.append(label_dict[label])
-                            
-                        for data in need_input_data:
-                            tmp_data.append(data_dict[data])
-                        aaa.append(tmp_data)
-                        if save_file:
-                            all_repetition = (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate # 重复率
-                            zero_repetition = len(list(filter(lambda x: x != 0, real_temp)))/ len(real_temp) < repetition_rate # 非0值率
-                            # if (not (all_repetition) and not(zero_repetition)):
-                            #     continue
-                                # file_name += ".txt"
-                            # write_file.write(str(file_name) + " " )
-                            # write_file.write(f'{str(file_name)}|s|{new_timestamps[0]/1000:1.3f}|e|{new_timestamps[-(end_index+1)]/1000:1.3f}|l|{new_timestamps[-1]/1000:1.3f} ')
-                            write_file.write(f'{str(file_name)}|s|{decimal_to_sixty(new_timestamps[0]/1000):1.3f}|e|{decimal_to_sixty(new_timestamps[-(end_index+1)]/1000):1.3f}|l|{decimal_to_sixty(new_timestamps[-1]/1000):1.3f} ')
-                            for item_ in tmp_data:
-                                write_file.write(str(item_) + " | ")
-                            write_file.write("\n")
+                                real_label = [(formatFloat(element)) for element in real_temp[multiStepOutput[-1]]]
+                                expect_label = [(formatFloat(element)) for element in expect_temp[multiStepOutput[-1]]]
+                                height_gap_label = [(formatFloat(element)) for element in height_gap_temp[multiStepOutput[-1]]]
+                                speed_gap_label = [(formatFloat(element)) for element in speed_gap_temp[multiStepOutput[-1]]]
+                                cmd_label = [(formatFloat(element)) for element in cmd_temp[multiStepOutput[-1]]]
+                                weght_label = [weight_temp[-1] for element in cmd_temp[multiStepOutput[-1]]]
 
+                            # end_index = int((time_gap - 1.0)/interp_interval) + 1
+                            end_index = int((time_gap - 1.0)/interp_interval)
+                            
+                            # 判断原始模型预测结果是否准确，若不准确则加入到训练数据中
+                            # if (abs(predict_expect[-end_index]) - abs(predict_expect[-1]) > 0.008):
+                            if 0 in cmd_temp or 0 in height_gap_temp:
+                                weght_label = 7.0
+                            # if 0 in cmd_temp or 0 in height_gap_temp:
+                                # continue
+                            len_list.append(len(real_temp))
+                            real_temp = " ".join(str(formatFloat(element)) for element in real_temp[0:-end_index])
+                            cmd_temp = " ".join(str(formatFloat(element))  for element in cmd_temp[0:-end_index])
+                            expect_temp = " ".join(str(formatFloat(element))  for element in expect_temp[0:-end_index])
+                            height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[0:-end_index])
+                            speed_gap_temp = " ".join(str(formatFloat(element))  for element in speed_gap_temp[0:-end_index])
+                  
+                            # height_gap_temp = " ".join(str(formatFloat(element))  for element in height_gap_temp[end_index:])
+                            # speed_gap_temp = " ".join(str(formatFloat(element))  for element in speed_gap_temp[end_index:])
+
+                            data_dict = {"real_temp":real_temp,"cmd_temp":cmd_temp,"expect_temp":expect_temp,"height_gap_temp":height_gap_temp,"speed_gap_temp":speed_gap_temp}
+                            label_dict = {"real_label":real_label,"cmd_label":cmd_label,"expect_label":expect_label,"height_gap_label":height_gap_label,"speed_gap_label":speed_gap_label,"weight_label":weght_label}
+                            tmp_data = []
+                            for label in need_output_data:
+                                if  multiStepOutput[0]:
+                                    for _ in label_dict[label]:
+                                        tmp_data.append(_)
+                                else:
+                                    tmp_data.append(label_dict[label])
+                                
+                            for data in need_input_data:
+                                tmp_data.append(data_dict[data])
+                            if save_file:                           
+                                # all_repetition = (len(real_temp) - len(set(real_temp))) / len(real_temp) < repetition_rate # 重复率
+                                # zero_repetition = len(list(filter(lambda x: x != 0, real_temp)))/ len(real_temp) < repetition_rate # 非0值率
+                                # if (not (all_repetition) and not(zero_repetition)):
+                                #     continue
+                                    # file_name += ".txt"
+                                # write_file.write(str(file_name) + " " )
+                                # write_file.write(f'{str(file_name)}|s|{new_timestamps[0]/1000:1.3f}|e|{new_timestamps[-(end_index+1)]/1000:1.3f}|l|{new_timestamps[-1]/1000:1.3f} ')
+                                # write_file.write(f'{str(file_name)}|s|{decimal_to_sixty(new_timestamps[0]/1000):1.3f}|e|{decimal_to_sixty(new_timestamps[-(end_index+1)]/1000):1.3f}|l|{decimal_to_sixty(new_timestamps[-1]/1000):1.3f} ')
+                                write_file.write(f'{str(file_name)}|s|{new_timestamps[0]/1000:1.3f}|e|{new_timestamps[-(end_index+1)]/1000:1.3f}|l|{new_timestamps[-1]/1000:1.3f} ')
+                                
+                                for item_ in tmp_data:
+                                    write_file.write(str(item_) + " | ")
+                                write_file.write("\n")
+    else:
+        aaa = False
         # print(len_list)
-        return aaa
+    return aaa
 
 
 def sixty_to_decimal(sixty_num):
@@ -660,24 +729,31 @@ def generateDRLTestData(
         t_temp, real_temp, cmd_temp, expect_temp, height_gap_temp,speed_gap_temp, predict_expect, weight_temp = [], [], [], [],[],[],[],[]
         
         record = False
+        start_index =  0
+        end_index = 0
         for index, item in enumerate(data_list[0 : -2]):
-            if data_list[index+2][2] != 0.0 and not record:
+            if data_list[index+2][2] != 0.0 and not record and abs(data_list[index+2][4])>0.01 :
                 record =True
+                start_index = index
                 continue
-            elif data_list[index+2][2] == 0.0 and record:
+            elif data_list[index+2][2] == 0.0 and data_list[index+2][1] == 0.0 and record:
+                end_index = index +2 
                 record =False
                 break
-            if record:
-                t_temp.append(sixty_to_decimal(item[0]))
-                real_temp.append(item[1])
-                cmd_temp.append(item[2])
-                expect_temp.append(item[3])
-                height_gap_temp.append(item[4]/1.4) # 归一化
-                speed_gap_temp.append(item[5])
-                predict_expect.append(item[6])
-                weight_temp.append(item[-1])
+        for index, item in enumerate(data_list[start_index : end_index+1]):
+            t_temp.append(sixty_to_decimal(item[0]))
+            real_temp.append(item[1])
+            cmd_temp.append(item[2])
+            expect_temp.append(item[3])
+            if abs(item[4])<0.01:
+                item[4] = 0.0
+            height_gap_temp.append(item[4]/1.4) # 归一化
+            speed_gap_temp.append(item[5])
+            predict_expect.append(item[6])
+            weight_temp.append(item[-1])
 
-        if (len(real_temp) > 0):
+        if (len(real_temp) > 1):
+            print(len(real_temp))
             start_time = np.array(t_temp).min()
             end_time = np.array(t_temp).max()
             start_time *= 1000
@@ -687,8 +763,8 @@ def generateDRLTestData(
             # 数据时间间隔插值
             if interp:
                 new_timestamps = np.arange(
-                    start_time + interp_interval,
-                    end_time + interp_interval,
+                    start_time,
+                    end_time,
                     interp_interval,
                 )  # 取不到end_time
 
@@ -700,21 +776,33 @@ def generateDRLTestData(
                 cmd_temp = np.round(
                     np.interp(new_timestamps/1000, t_temp, cmd_temp), 3
                 )
-                height_temp = np.round(
-                    np.interp(new_timestamps/1000, t_temp, height_gap_temp), 3
-                )
-                end_time /= 1000
-                interp_interval /= 1000
+                
+                if len(np.where(np.array(height_gap_temp) != 0.0)[0]) > 0:
+                    index_ = np.where(np.array(height_gap_temp) != 0.0)[0][0]
+                    if index_ == 0:
+                        index_ =None
+     
+                    height_gap_temp = np.round(
+                        np.interp(new_timestamps/1000, t_temp, height_gap_temp), 3
+                    )
+                    
+                    if index_ != None:
+                        for i,t in enumerate(new_timestamps/1000):
+                            if t >= t_temp[index_]:
+                                for j in range(0,i+1):
+                                    height_gap_temp[j] = 0.0
+                                break
+                    end_time /= 1000
+                    interp_interval /= 1000
 
             print(new_timestamps.shape,real_temp.shape)
-            len_list.append(len(real_temp))
-            # real_temp = " ".join(str(formatFloat(element)) for element in real_temp)
-            # cmd_temp = " ".join(str(formatFloat(element))  for element in cmd_temp)
-            
+            len_list.append(len(real_temp))           
                 
             if save_file:
                 for index,t in enumerate(new_timestamps):
-                    write_file.write(f'{str(formatFloat(decimal_to_sixty(t/1000)))} | {str(real_temp[index])} | {str(cmd_temp[index])} | {str(height_gap_temp[2])}')
+                    if height_gap_temp[index]*1.4 ==0 and real_temp[index] ==0:
+                        continue
+                    write_file.write(f'{str(formatFloat(decimal_to_sixty(t/1000)))} | {str(real_temp[index])} | {str(cmd_temp[index])} | {str(formatFloat(height_gap_temp[index]*1.4))} | {str(weight_temp[0])} | {str( formatFloat(height_gap_temp[np.nonzero(height_gap_temp)[0][0]]*1.4))}')
                     write_file.write("\n")
 
         # print(len_list)

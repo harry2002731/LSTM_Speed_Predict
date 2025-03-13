@@ -32,7 +32,10 @@ def roboshop_match_line(line):
     keyword1 = "Default argument"
     return keyword1 in line
 
-# 叉车位置关键词
+
+def weight_prob_line(line):
+    keyword1 = "weight prob"
+    return keyword1 in line
 
 
 def fork_match_line(line):
@@ -57,7 +60,8 @@ def extractLog(dir, tar_dir, command ,command2 = None):
                             matching_lines = [line for line in content if command(line) or command2(line)]
                         else:
                             matching_lines = [line for line in content if command(line)]
-
+                        if command(matching_lines[0]):
+                            matching_lines.pop(0)
                         contents.append(matching_lines)
                 except Exception as e:
                     print(f"Error reading file {file_path}: {e}")
@@ -86,15 +90,18 @@ if __name__ == "__main__":
     # roboshop测试时自动从本地文件夹复制到目标路径
     data_set_type_enum = ["orin", "modifyied", "fork"]
     data_type = "modifyied"
-    compare_data = False
+    compare_data = True
     generate_train_data = True
     copy_file = False
-    clear_file = False
+    clear_file = True
 
     # compare_data = True
     # generate_train_data = False
     # copy_file = True
-    mode = "drltest"
+    mode = "train"
+    # mode = "normandnormal"
+    # mode = "error"
+    # mode = "drltest"
     if copy_file:
         latest_file_name = ""
         latest_file_name = find_latest_file("data/roboshop_data/data_set/")
@@ -153,10 +160,23 @@ if __name__ == "__main__":
         motor_compared_path = motor_test_compared_path
     elif mode == "drltest":
         orin_path = orin_train_path
+        motor_train_path = root_directory_path + r"drltest_Data/"
         
         motor_compared_path = motor_drltest_compared_path
         txt_name = "train"
-
+    elif mode == "error":
+        orin_train_path = root_directory_path + r"data_set/errordata/"
+        
+        orin_path = orin_train_path
+        txt_name = "train"
+        motor_compared_path = motor_train_compared_path
+        if not compare_data:
+            motor_compared_path = root_directory_path + r"compared_data/error/"
+    elif mode == "normandnormal":
+        orin_train_path = root_directory_path + r"data_set/test(errornormal)/"
+        orin_path = orin_train_path
+        txt_name = "train"
+        motor_compared_path = motor_train_compared_path
         
     # 清空目录下所有文件
     if clear_file:
@@ -165,11 +185,12 @@ if __name__ == "__main__":
         deleteDirFiles(motor_compared_path)
         deleteDirFiles(motor_train_path)
     
-    weights_list = ["0.0T","0.6T","1.5T"]
+    weights_list = ["0.0T","0.3T","0.6T","0.9T","1.2T","1.5T"]
     for wight in weights_list:
         orin_path = orin_train_path + wight
         
         # extractLog(orin_path, total_speed_p, roboshop_match_line,real_match_line)
+        # extractLog(orin_path, total_speed_p, roboshop_match_line,weight_prob_line)
         extractLog(orin_path, total_speed_p, roboshop_match_line)
         # 匹配数据并存放到compared中
         if compare_data:
@@ -189,8 +210,10 @@ if __name__ == "__main__":
                                     motor_compared_path + file_name + ".txt", True)
 
                     elif data_type in data_set_type_enum and data_type == "modifyied":
+                        weight = [0.0,0.3,0.6,0.9,1.2,1.5]
+                        index = weight.index(float(wight.split("T")[0]))
                         total_data = decodeDataList(
-                            total_speed_p + file_name + ".txt", MotorTotal,wight.split("T")[0])
+                            total_speed_p + file_name + ".txt", MotorTotal,index)
                         writeFile(motor_compared_path +
                                 file_name + ".txt", total_data)
 
@@ -215,41 +238,39 @@ if __name__ == "__main__":
         for root, dirs, files in os.walk(motor_compared_path):
             for file_name in files:
                 start_time = time.time()
-                # generateDRLTestData(motor_train_path + file_name,motor_compared_path + file_name,interp_interval=0.05,interp=True,save_file=True)
-                
-                generateTrainData(
-                    motor_train_path + file_name,
-                    motor_compared_path + file_name,
-                    1.05,
-                    interp_interval=0.05,
-                    repetition_rate=0.88,
-                    need_input_data=["real_temp",
-                                    "cmd_temp", "height_gap_temp"],
-                    need_output_data=["real_label","weight_label"],
+                if mode == "train" or mode == "error":
+                    state = generateTrainData(
+                        motor_train_path + file_name,
+                        motor_compared_path + file_name,
+                        1.05,
+                        interp_interval=0.05,
+                        repetition_rate=0.88,
+                        need_input_data=["real_temp",
+                                        "cmd_temp", "height_gap_temp"],
+                        need_output_data=["real_label","weight_label"],
 
+                        # need_input_data = ["cmd_temp","speed_gap_temp","height_gap_temp"],
+                        # need_output_data = ["cmd_label"],
 
-                    # need_input_data = ["cmd_temp","speed_gap_temp","height_gap_temp"],
-                    # need_output_data = ["cmd_label"],
+                        # need_input_data = ["expect_temp","height_gap_temp","real_temp"],
+                        # need_output_data = ["expect_label"],
 
-                    # need_input_data = ["expect_temp","height_gap_temp","real_temp"],
-                    # need_output_data = ["expect_label"],
+                        # need_input_data = ["expect_temp","height_gap_temp"],
+                        # need_output_data = ["expect_label"],
+                        interp=True,
+                        difference=False,
+                        multiStepOutput = [False, [-8,-6,-1] ],
+                        save_file=True
+                    )
+                    if state:
+                        mergeData(
+                            root_directory_path + "/"+txt_name+".txt",
+                            motor_train_path + file_name,
+                        )
+                        print(file_name+" cost time:"+str(time.time() - start_time))
+                elif mode == "drltest":
+                    generateDRLTestData(motor_train_path + file_name,motor_compared_path + file_name,interp_interval=0.05,interp=True,save_file=True)
+            if mode == "train" or mode == "error":
+                mergeData("./data/"+txt_name+".txt",
+                        root_directory_path + "/"+txt_name+".txt")
 
-                    # need_input_data = ["expect_temp","height_gap_temp"],
-                    # need_output_data = ["expect_label"],
-                    interp=True,
-                    difference=False,
-                    multiStepOutput = [False, [-8,-6,-1] ],
-                    save_file=True
-                )
-                mergeData(
-                    root_directory_path + "/"+txt_name+".txt",
-                    motor_train_path + file_name,
-                )
-                print(file_name+" cost time:"+str(time.time() - start_time))
-            mergeData("./data/"+txt_name+".txt",
-                    root_directory_path + "/"+txt_name+".txt")
-
-
-# formatFile(r"data\new_car2_train.txt")
-# 调整时间间隔
-# 修改网络输出 多时间 0.1 0.2 0.3 ，然后由滞后性判断使用哪个值

@@ -7,13 +7,18 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 import random
 import time
-from modelLSTM import MultiInputLSTM
+from modelLSTM import MultiInputLSTM3
 import onnx
 import MNN
 import onnxruntime
 from DataProcess import *
 import subprocess
-batch_size = 4096
+# 测试loader中的所有数据
+from collections import defaultdict
+import random
+import torch
+import torch.nn as nn
+batch_size = 8192
 
 input_size = 20
 hidden_size = 16
@@ -31,8 +36,8 @@ eps = 1e-8
 weight_decay = 0
 # 是否使用AMSGrad
 amsgrad = True
-
-
+file =  open("./test.txt", 'a', encoding='utf-8')
+file.truncate(0)
 def genDataloader(data_path, device, input_size, input_param, output_param, random_state, if_random, if_torch):
     train_, test_ = loadData(data_path, device, input_size,
                              random_state, input_param, output_param, if_random, if_torch)
@@ -83,7 +88,7 @@ def train(device, input_num, output_num, debug=False, pretrained=False):
         print("Load pretrained model \n")
         model = torch.load(r"model/model.pth").to(device, dtype=torch.float64)
     else:
-        model = MultiInputLSTM(input_size, input_num, output_num).to(
+        model = MultiInputLSTM3(input_size, input_num, output_num).to(
             device, dtype=torch.float64)
 
     # 创建Adam优化器
@@ -111,14 +116,18 @@ def train(device, input_num, output_num, debug=False, pretrained=False):
             train_labels = torch.stack(train_labels).T
             outputs = model(train_model_inputs)
 
-            loss_reg = loss_function(
-                outputs[0] * 1000, train_labels[:, 0] * 1000)
+            # loss_reg = loss_function(
+            #     outputs[0] * 1000, train_labels[:, 0] * 1000)
+            # loss_cls = criterion_cls(
+            #     outputs[1].view(-1, 6), train_labels[:, 1].type(torch.long))
+            
             loss_cls = criterion_cls(
-                outputs[1].view(-1, 3), train_labels[:, 1].type(torch.long))
-            total_loss = loss_cls + loss_reg  # 将两个损失相加
+                outputs.view(-1, 8), train_labels[:, 1].type(torch.long))
+            # total_loss = loss_cls + loss_reg  # 将两个损失相加
+            total_loss = loss_cls 
 
             true_labels = train_labels[:, 1].type(torch.long)
-            _, predicted = torch.max(outputs[1].view(-1, 3), 1)
+            _, predicted = torch.max(outputs.view(-1, 8), 1)
             total_num += len(predicted)
 
             equal_elements = torch.eq(predicted, true_labels)
@@ -127,7 +136,7 @@ def train(device, input_num, output_num, debug=False, pretrained=False):
             total_loss.backward()
             optimizer.step()
 
-        if epoch % 5 == 0:
+        if epoch % 50 == 0:
             # print(f"Loss: {total_loss.item():.4f}",loss_reg.item(),loss_cls.item())
             true_list, pred_list, loss_list, test_acc, file_error_list = test(
                 model, test_loader, input_num, output_num, train_mode=True)
@@ -138,50 +147,63 @@ def train(device, input_num, output_num, debug=False, pretrained=False):
                 torch.save(model, r"model/model.pth")
             # print(f'Epoch: {epoch + 1}/{num_epochs}\t Loss: {loss.item():.4f} test_Loss: {avg_.item():.4f} model_saved:{model_saved}')
             print(f'Epoch: {epoch + 1}/{num_epochs}\t || Train: Loss: {total_loss.item():.4f} Classify_ACC {correct/total_num} || Test: Loss: {avg_}  Classify_ACC {test_acc} || Model_Saved:{model_saved}')
+            # print(f'Epoch: {epoch + 1}/{num_epochs}\t || Train: Loss: {total_loss.item():.4f} Classify_ACC {correct/total_num} || Model_Saved:{model_saved}')
 
     print(time.time()-start_time, f"num_epochs为{num_epochs}")
 
 
-# 测试loader中的所有数据
+
+
 def test(model, test_loader, input_num, output_num, train_mode=False):
     model.eval()
     loss_function = nn.MSELoss()
     criterion_cls = nn.CrossEntropyLoss()  # 分类损失函数
 
-    # 打印权重信息
-    # for name in model.state_dict():
-    #     print(name, model.state_dict()[name])
-    iter = 0
-    correct = 0
+    # 初始化每个类别的正确预测数和总数
+    class_correct = defaultdict(int)
+    class_total = defaultdict(int)
+
     print("\nCALCULATING ACCURACY...\n")
     with torch.no_grad():
         pred_list, loss_list, true_list = [], [], []
         for i, (test_datum, test_labels, test_file_name) in enumerate(test_loader):
-            test_labels = torch.stack(test_labels).T
+            if random.random() < 0.1:
+                test_labels = torch.stack(test_labels).T
 
-            test_model_inputs = [
-                i.view(-1, 1, input_size).to(dtype=torch.float64) for i in test_datum]
-            outputs = model(test_model_inputs)
+                test_model_inputs = [
+                    i.view(-1, 1, input_size).to(dtype=torch.float64) for i in test_datum]
+                outputs = model(test_model_inputs)
 
-            loss_reg = loss_function(
-                outputs[0] * 1000, test_labels[:, 0] * 1000)
-            loss_cls = criterion_cls(
-                outputs[1].view(-1, 3), test_labels[:, 1].type(torch.long))
-            loss = loss_cls + loss_reg  # 简单地将两个损失相加
-            _, predicted = torch.max(outputs[1].view(-1, 3), 1)
-            true_labels = test_labels[:, 1].type(torch.long)
-            # 比较预测类别和真实标签，统计正确的个数
-            if predicted == true_labels:
-                correct += 1
+                loss_cls = criterion_cls(
+                    outputs.view(-1, 8), test_labels[:, 1].type(torch.long))
+                loss = loss_cls  # 简单地将两个损失相加
+                _, predicted = torch.max(outputs.view(-1, 8), 1)
+                true_labels = test_labels[:, 1].type(torch.long)
 
-            loss_list.append(float(loss.cpu().detach().numpy()))
-            iter += 1
+                # 统计每个类别的正确预测数和总数
+                for pred, true in zip(predicted, true_labels):
+                    class_total[true.item()] += 1
+                    if pred.item() == true.item():
+                        class_correct[true.item()] += 1
 
-        # print(f"平均值 {sum(loss_list)/len(loss_list)} 最大损失 {max(loss_list)} 分类准确度 {correct/len(loss_list)}")
+                loss_list.append(float(loss.cpu().detach().numpy()))
 
-    # return true_list, pred_list, loss_list, file_name_list, file_error_list
-    return [], [], loss_list, correct/len(loss_list), []
+    # 计算每个类别的准确度
+    class_accuracy = {cls: class_correct[cls] / class_total[cls] if class_total[cls] > 0 else 0
+                      for cls in class_total.keys()}
 
+    # 打印每个类别的准确度和总数
+    print("\nCLASS ACCURACY AND TOTAL COUNTS:")
+    for cls in sorted(class_total.keys()):
+        acc = class_accuracy[cls]
+        total = class_total[cls]
+        print(f"Class {cls}: Accuracy = {acc:.4f}, Total Samples = {total}")
+
+    # 计算整体准确度
+    overall_accuracy = sum(class_correct.values()) / sum(class_total.values()) if sum(class_total.values()) > 0 else 0
+    print(f"\nOverall Accuracy: {overall_accuracy:.4f}")
+
+    return [], [], loss_list, overall_accuracy, class_accuracy
 
 def convert2ONNX(input_num, output_num, model_name, batch_size, input_size, device="cpu", opset_version=17):
     print("\nCONVERTING TORCH TO ONNX...\n")
@@ -247,7 +269,6 @@ def ONNXRuntime():
         }
 
         ort_outs = ort_session.run(None, ort_inputs)
-        print(ort_outs)
         if i == 5:
             break
 
@@ -257,10 +278,9 @@ if __name__ == "__main__":
     # print(torch.cuda.is_available())
     # mode = input("mode:")
     mode = "1"
-    if mode == "1":
-        # print("start "+time.time())
+    if mode == "train" or mode == "1":
         train(device, input_num=3, output_num=2,
-              debug=True, pretrained=False)  # 3输入1输
+              debug=True, pretrained=True)  # 3输入1输
         # test(device,input_num=3,output_num=1)
         convert2ONNX(
             input_num=3,
@@ -272,10 +292,10 @@ if __name__ == "__main__":
             opset_version=17
         )
         subprocess.run(['bash', 'convert.sh', 'model'])
-    elif mode == "2":
+    elif mode == "convert" or mode == "2":
         convert2ONNX(
             input_num=3,
-            output_num=2,
+            output_num=1,
             model_name="model.pth",
             batch_size=batch_size,
             input_size=input_size,
